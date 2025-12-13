@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '../../services/api';
+import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
 import { showToast } from '../../components/Toast';
 
 const Payment = () => {
@@ -9,33 +9,55 @@ const Payment = () => {
   const [formData, setFormData] = useState({ labourId: '', amount: '', deduction: 0, paymentMode: 'cash', remarks: '' });
 
   useEffect(() => {
+    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = async () => {
-    try {
-      const [labRes, payRes] = await Promise.all([
-        api.get('/site/labours'),
-        api.get('/site/payments')
-      ]);
-      setLabours(labRes.data.data || []);
-      setPayments(payRes.data.data || []);
-    } catch (error) {
-      showToast('Failed to load data', 'error');
-    }
+  const fetchData = () => {
+    const labs = getCollection('labours', []);
+    const pays = getCollection('payments', []);
+    setLabours(labs);
+    setPayments(pays);
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    try {
-      await api.post('/site/payment', formData);
-      showToast('Payment recorded successfully', 'success');
-      setShowForm(false);
-      setFormData({ labourId: '', amount: '', deduction: 0, paymentMode: 'cash', remarks: '' });
-      fetchData();
-    } catch (error) {
-      showToast('Failed to record payment', 'error');
+    const labour = labours.find(l => l.id === formData.labourId);
+    const amount = Number(formData.amount) || 0;
+    const deduction = Number(formData.deduction) || 0;
+    const finalAmount = Math.max(0, amount - deduction);
+
+    const payment = {
+      id: generateId(),
+      ...formData,
+      labourName: labour?.name || '',
+      amount,
+      deduction,
+      finalAmount,
+      createdAt: new Date().toISOString()
+    };
+
+    // update payments collection
+    const updatedPayments = [...getCollection('payments', []), payment];
+    saveCollection('payments', updatedPayments);
+
+    // update labour pending payout
+    if (labour) {
+      const labs = getCollection('labours', []).map(l => {
+        if (l.id === labour.id) {
+          const nextPending = Math.max(0, (Number(l.pendingPayout) || 0) - finalAmount);
+          return { ...l, pendingPayout: nextPending };
+        }
+        return l;
+      });
+      saveCollection('labours', labs);
+      setLabours(labs);
     }
+
+    showToast('Payment recorded successfully', 'success');
+    setShowForm(false);
+    setFormData({ labourId: '', amount: '', deduction: 0, paymentMode: 'cash', remarks: '' });
+    setPayments(updatedPayments);
   };
 
   return (
@@ -52,7 +74,7 @@ const Payment = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">Select Labour</label>
               <select value={formData.labourId} onChange={(e) => {
                 const labour = labours.find(l => l.id === e.target.value);
-                setFormData({...formData, labourId: e.target.value, amount: labour?.pendingPayout || 0});
+                setFormData({ ...formData, labourId: e.target.value, amount: labour?.pendingPayout || 0 });
               }} required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="">Select Labour</option>
                 {labours.map(l => (
@@ -62,15 +84,15 @@ const Payment = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Amount (₹)</label>
-              <input type="number" value={formData.amount} onChange={(e) => setFormData({...formData, amount: e.target.value})} required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <input type="number" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Deduction (₹)</label>
-              <input type="number" value={formData.deduction} onChange={(e) => setFormData({...formData, deduction: e.target.value})} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <input type="number" value={formData.deduction} onChange={(e) => setFormData({ ...formData, deduction: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Payment Mode</label>
-              <select value={formData.paymentMode} onChange={(e) => setFormData({...formData, paymentMode: e.target.value})} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <select value={formData.paymentMode} onChange={(e) => setFormData({ ...formData, paymentMode: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="cash">Cash</option>
                 <option value="bank">Bank Transfer</option>
               </select>
@@ -83,7 +105,7 @@ const Payment = () => {
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">Remarks</label>
-              <input type="text" value={formData.remarks} onChange={(e) => setFormData({...formData, remarks: e.target.value})} placeholder="Optional" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <input type="text" value={formData.remarks} onChange={(e) => setFormData({ ...formData, remarks: e.target.value })} placeholder="Optional" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
           </div>
           <button type="submit" className="mt-5 px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-semibold">
@@ -94,7 +116,7 @@ const Payment = () => {
 
       <div className="mt-6 bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Payment History</h2>
-        
+
         {/* Mobile View */}
         <div className="block lg:hidden space-y-3">
           {payments.map(p => (

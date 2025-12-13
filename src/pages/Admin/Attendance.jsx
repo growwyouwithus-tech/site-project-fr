@@ -1,26 +1,20 @@
 import { useState, useEffect } from 'react';
-import api from '../../services/api';
-import { showToast } from '../../components/Toast';
+import { ensureSeedData, getCollection } from '../../services/storage';
 
 const Attendance = () => {
   const [attendance, setAttendance] = useState([]);
   const [users, setUsers] = useState([]);
 
   useEffect(() => {
+    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = async () => {
-    try {
-      const [attRes, usersRes] = await Promise.all([
-        api.get('/admin/attendance'),
-        api.get('/admin/users?role=sitemanager')
-      ]);
-      setAttendance(attRes.data.data || []);
-      setUsers(usersRes.data.data || []);
-    } catch (error) {
-      showToast('Failed to load data', 'error');
-    }
+  const fetchData = () => {
+    const storedAttendance = getCollection('attendanceAdmin', []);
+    const storedUsers = getCollection('users', []).filter(u => u.role === 'sitemanager');
+    setAttendance(storedAttendance);
+    setUsers(storedUsers);
   };
 
   // Calculate attendance percentage
@@ -30,12 +24,12 @@ const Attendance = () => {
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
     const currentDay = today.getDate();
-    
+
     const attendanceDays = userAttendance.filter(att => {
       const attDate = new Date(att.date);
       return attDate >= startOfMonth && attDate <= today;
     }).length;
-    
+
     return ((attendanceDays / currentDay) * 100).toFixed(1);
   };
 
@@ -49,11 +43,11 @@ const Attendance = () => {
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
       <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-6">Attendance Management</h1>
-      
+
       {/* Site Managers Table */}
       <div className="bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Site Managers</h2>
-        
+
         {/* Mobile View */}
         <div className="block md:hidden space-y-4">
           {users.map(user => (
@@ -109,7 +103,7 @@ const Attendance = () => {
       {/* Attendance Records */}
       <div className="bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Attendance Records</h2>
-        
+
         {/* Mobile View */}
         <div className="block md:hidden space-y-3">
           {attendance.map(att => (

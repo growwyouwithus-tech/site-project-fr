@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '../../services/api';
+import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
 import { showToast } from '../../components/Toast';
 
 const Users = () => {
@@ -15,51 +15,44 @@ const Users = () => {
   };
 
   useEffect(() => {
+    ensureSeedData();
     fetchUsers();
   }, []);
 
-  const fetchUsers = async () => {
-    try {
-      const res = await api.get('/admin/users?role=sitemanager');
-      setUsers(res.data.data || []);
-    } catch (error) {
-      showToast('Failed to load users', 'error');
-    }
+  const fetchUsers = () => {
+    const stored = getCollection('users', []);
+    setUsers(stored);
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    try {
-      const userData = {
-        ...formData,
-        userId: generateUserId()
-      };
-      await api.post('/admin/users', userData);
-      showToast('Site manager created successfully', 'success');
-      setShowForm(false);
-      setFormData({ name: '', email: '', password: '', phone: '', salary: '', dateOfJoining: new Date().toISOString().split('T')[0] });
-      fetchUsers();
-    } catch (error) {
-      showToast(error.response?.data?.error || 'Failed to create user', 'error');
-    }
+    const userData = {
+      id: generateId(),
+      ...formData,
+      role: 'sitemanager',
+      userId: generateUserId()
+    };
+    const updated = [...getCollection('users', []), userData];
+    saveCollection('users', updated);
+    showToast('Site manager created successfully', 'success');
+    setShowForm(false);
+    setFormData({ name: '', email: '', password: '', phone: '', salary: '', dateOfJoining: new Date().toISOString().split('T')[0] });
+    setUsers(updated);
   };
 
-  const handleDeactivate = async (id) => {
+  const handleDeactivate = (id) => {
     if (!confirm('Deactivate this user?')) return;
-    try {
-      await api.delete(`/admin/users/${id}`);
-      showToast('User deactivated', 'success');
-      fetchUsers();
-    } catch (error) {
-      showToast('Failed to deactivate user', 'error');
-    }
+    const updated = getCollection('users', []).filter(u => u.id !== id);
+    saveCollection('users', updated);
+    showToast('User deactivated', 'success');
+    setUsers(updated);
   };
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
       <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-6">User Management</h1>
-      <button 
-        onClick={() => setShowForm(!showForm)} 
+      <button
+        onClick={() => setShowForm(!showForm)}
         className="px-5 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
       >
         {showForm ? 'Cancel' : 'Add Site Manager'}
@@ -70,65 +63,65 @@ const Users = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
-              <input 
-                type="text" 
-                placeholder="Full Name" 
-                value={formData.name} 
-                onChange={(e) => setFormData({...formData, name: e.target.value})} 
-                required 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <input
+                type="text"
+                placeholder="Full Name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-              <input 
-                type="email" 
-                placeholder="Email Address" 
-                value={formData.email} 
-                onChange={(e) => setFormData({...formData, email: e.target.value})} 
-                required 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <input
+                type="email"
+                placeholder="Email Address"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                required
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-              <input 
-                type="password" 
-                placeholder="Password (min 6 chars)" 
-                value={formData.password} 
-                onChange={(e) => setFormData({...formData, password: e.target.value})} 
-                required 
+              <input
+                type="password"
+                placeholder="Password (min 6 chars)"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                required
                 minLength="6"
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
-              <input 
-                type="tel" 
-                placeholder="Phone Number" 
-                value={formData.phone} 
-                onChange={(e) => setFormData({...formData, phone: e.target.value})} 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <input
+                type="tel"
+                placeholder="Phone Number"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Salary</label>
-              <input 
-                type="number" 
-                placeholder="Monthly Salary" 
-                value={formData.salary} 
-                onChange={(e) => setFormData({...formData, salary: e.target.value})} 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <input
+                type="number"
+                placeholder="Monthly Salary"
+                value={formData.salary}
+                onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Date of Joining</label>
-              <input 
-                type="date" 
-                value={formData.dateOfJoining} 
-                onChange={(e) => setFormData({...formData, dateOfJoining: e.target.value})} 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <input
+                type="date"
+                value={formData.dateOfJoining}
+                onChange={(e) => setFormData({ ...formData, dateOfJoining: e.target.value })}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -140,7 +133,7 @@ const Users = () => {
 
       <div className="mt-6 bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Site Managers</h2>
-        
+
         {/* Mobile View */}
         <div className="block md:hidden space-y-3">
           {users.map(u => (
@@ -153,16 +146,15 @@ const Users = () => {
                 <div><span className="font-medium">DOJ:</span> {u.dateOfJoining ? new Date(u.dateOfJoining).toLocaleDateString() : 'N/A'}</div>
                 <div><span className="font-medium">Salary:</span> <span className="text-green-600 font-bold">₹{u.salary?.toLocaleString()}</span></div>
                 <div>
-                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
-                    u.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                  }`}>
+                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${u.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
                     {u.active ? 'Active' : 'Inactive'}
                   </span>
                 </div>
               </div>
               {u.active && (
-                <button 
-                  onClick={() => handleDeactivate(u.id)} 
+                <button
+                  onClick={() => handleDeactivate(u.id)}
                   className="mt-3 w-full px-3 py-2 bg-red-500 text-white rounded text-sm font-medium hover:bg-red-600"
                 >
                   Deactivate
@@ -197,16 +189,15 @@ const Users = () => {
                   <td className="px-4 py-3">{u.dateOfJoining ? new Date(u.dateOfJoining).toLocaleDateString() : 'N/A'}</td>
                   <td className="px-4 py-3 text-green-600 font-bold">₹{u.salary?.toLocaleString()}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                      u.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${u.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>
                       {u.active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
                   <td className="px-4 py-3">
                     {u.active && (
-                      <button 
-                        onClick={() => handleDeactivate(u.id)} 
+                      <button
+                        onClick={() => handleDeactivate(u.id)}
                         className="px-3 py-1.5 bg-red-500 text-white rounded text-sm hover:bg-red-600"
                       >
                         Deactivate

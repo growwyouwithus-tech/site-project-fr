@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import api from '../../services/api';
 import { showToast } from '../../components/Toast';
+import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
 
 const MachineCategory = () => {
   const { category } = useParams();
@@ -12,50 +12,46 @@ const MachineCategory = () => {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedMachine, setSelectedMachine] = useState(null);
   const [assignProjectId, setAssignProjectId] = useState('');
-  const [formData, setFormData] = useState({ 
-    name: '', 
-    model: '', 
+  const [formData, setFormData] = useState({
+    name: '',
+    model: '',
     plateNumber: '',
-    quantity: 1, 
-    status: 'available' 
+    quantity: 1,
+    status: 'available'
   });
 
   useEffect(() => {
+    ensureSeedData();
     fetchMachines();
     fetchProjects();
   }, [category]);
 
   const fetchMachines = async () => {
-    try {
-      const res = await api.get(`/admin/machines?category=${category}`);
-      const data = res.data.data;
-      setMachines(Array.isArray(data) ? data : []);
-    } catch (error) {
-      showToast('Failed to load machines', 'error');
-      setMachines([]);
-    }
+    const all = getCollection('machines', []);
+    const filtered = all.filter(m => m.category === category);
+    setMachines(filtered);
   };
 
   const fetchProjects = async () => {
-    try {
-      const res = await api.get('/admin/projects');
-      setProjects(res.data.data || []);
-    } catch (error) {
-      console.error('Failed to load projects');
-    }
+    const stored = getCollection('projects', []);
+    setProjects(stored);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    try {
-      await api.post('/admin/machines', { ...formData, category });
-      showToast('Machine added successfully', 'success');
-      setShowForm(false);
-      setFormData({ name: '', model: '', plateNumber: '', quantity: 1, status: 'available' });
-      fetchMachines();
-    } catch (error) {
-      showToast('Failed to add machine', 'error');
-    }
+    const newMachine = {
+      ...formData,
+      id: generateId(),
+      category,
+      quantity: isConsumable ? formData.quantity : Number(formData.quantity) || 1
+    };
+    const all = getCollection('machines', []);
+    const updated = [...all, newMachine];
+    saveCollection('machines', updated);
+    showToast('Machine added successfully', 'success');
+    setShowForm(false);
+    setFormData({ name: '', model: '', plateNumber: '', quantity: 1, status: 'available' });
+    fetchMachines();
   };
 
   const handleAssignMachine = async () => {
@@ -63,27 +59,22 @@ const MachineCategory = () => {
       showToast('Please select a project', 'error');
       return;
     }
-    try {
-      await api.post(`/admin/machines/${selectedMachine.id}/assign`, { projectId: assignProjectId });
-      showToast('Machine assigned to project', 'success');
-      setShowAssignModal(false);
-      setSelectedMachine(null);
-      setAssignProjectId('');
-      fetchMachines();
-    } catch (error) {
-      showToast('Failed to assign machine', 'error');
-    }
+    const all = getCollection('machines', []);
+    const updated = all.map(m => m.id === selectedMachine.id ? { ...m, projectId: assignProjectId, status: 'in-use' } : m);
+    saveCollection('machines', updated);
+    showToast('Machine assigned to project', 'success');
+    setShowAssignModal(false);
+    setSelectedMachine(null);
+    setAssignProjectId('');
+    fetchMachines();
   };
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this machine?')) return;
-    try {
-      await api.delete(`/admin/machines/${id}`);
-      showToast('Machine deleted', 'success');
-      fetchMachines();
-    } catch (error) {
-      showToast('Failed to delete machine', 'error');
-    }
+    const updated = getCollection('machines', []).filter(m => m.id !== id);
+    saveCollection('machines', updated);
+    showToast('Machine deleted', 'success');
+    fetchMachines();
   };
 
   const categoryNames = {
@@ -101,16 +92,16 @@ const MachineCategory = () => {
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
       {/* Back Button */}
-      <button 
-        onClick={() => navigate('/admin/machines')} 
+      <button
+        onClick={() => navigate('/admin/machines')}
         className="mb-4 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors flex items-center gap-2"
       >
         ← Back
       </button>
 
       <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-6">{categoryNames[category] || category}</h1>
-      <button 
-        onClick={() => setShowForm(!showForm)} 
+      <button
+        onClick={() => setShowForm(!showForm)}
         className="px-5 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
       >
         {showForm ? 'Cancel' : `Add ${isLabEquipment ? 'Equipment' : 'Machine'}`}
@@ -123,67 +114,67 @@ const MachineCategory = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 {isConsumable ? 'Item Name' : isEquipment ? 'Equipment Name' : isLabEquipment ? 'Equipment Name' : 'Machine Name'}
               </label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 placeholder={
-                  isConsumable ? "e.g., Cement, Steel Rods" : 
-                  isEquipment ? "e.g., Drill Machine, Hammer" : 
-                  isLabEquipment ? "e.g., Concrete Tester" : 
-                  "e.g., JCB, Crane"
-                } 
-                value={formData.name} 
-                onChange={(e) => setFormData({...formData, name: e.target.value})} 
-                required 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                  isConsumable ? "e.g., Cement, Steel Rods" :
+                    isEquipment ? "e.g., Drill Machine, Hammer" :
+                      isLabEquipment ? "e.g., Concrete Tester" :
+                        "e.g., JCB, Crane"
+                }
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            
+
             {!isConsumable && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Model/Brand</label>
-                <input 
-                  type="text" 
-                  placeholder="Model Number or Brand" 
-                  value={formData.model} 
-                  onChange={(e) => setFormData({...formData, model: e.target.value})} 
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                <input
+                  type="text"
+                  placeholder="Model Number or Brand"
+                  value={formData.model}
+                  onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             )}
-            
+
             {isBigMachine && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Plate Number</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g., DL-01-AB-1234" 
-                  value={formData.plateNumber} 
-                  onChange={(e) => setFormData({...formData, plateNumber: e.target.value})} 
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                <input
+                  type="text"
+                  placeholder="e.g., DL-01-AB-1234"
+                  value={formData.plateNumber}
+                  onChange={(e) => setFormData({ ...formData, plateNumber: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             )}
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 {isConsumable ? 'Quantity (with unit)' : 'Quantity'}
               </label>
-              <input 
-                type={isConsumable ? "text" : "number"} 
-                placeholder={isConsumable ? "e.g., 100 bags, 50 kg" : "Quantity"} 
-                value={formData.quantity} 
-                onChange={(e) => setFormData({...formData, quantity: e.target.value})} 
-                required 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <input
+                type={isConsumable ? "text" : "number"}
+                placeholder={isConsumable ? "e.g., 100 bags, 50 kg" : "Quantity"}
+                value={formData.quantity}
+                onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                required
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            
+
             {!isConsumable && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                <select 
-                  value={formData.status} 
-                  onChange={(e) => setFormData({...formData, status: e.target.value})} 
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="available">Available</option>
@@ -201,7 +192,7 @@ const MachineCategory = () => {
 
       <div className="mt-6 bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
         <h2 className="text-xl font-bold text-gray-900 mb-4">{isLabEquipment ? 'Equipment List' : 'Machines List'}</h2>
-        
+
         {/* Mobile View */}
         <div className="block md:hidden space-y-3">
           {machines.map(m => (
@@ -212,26 +203,25 @@ const MachineCategory = () => {
                 {!isLabEquipment && m.plateNumber && <div><span className="font-medium">Plate:</span> {m.plateNumber}</div>}
                 <div><span className="font-medium">Quantity:</span> {m.quantity}</div>
                 <div>
-                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold capitalize ${
-                    m.status === 'available' ? 'bg-green-100 text-green-800' : 
-                    m.status === 'in-use' ? 'bg-yellow-100 text-yellow-800' : 
-                    'bg-red-100 text-red-800'
-                  }`}>
+                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold capitalize ${m.status === 'available' ? 'bg-green-100 text-green-800' :
+                      m.status === 'in-use' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                    }`}>
                     {m.status}
                   </span>
                 </div>
               </div>
               <div className="mt-3 flex gap-2">
                 {!isLabEquipment && (
-                  <button 
-                    onClick={() => { setSelectedMachine(m); setShowAssignModal(true); }} 
+                  <button
+                    onClick={() => { setSelectedMachine(m); setShowAssignModal(true); }}
                     className="flex-1 px-3 py-2 bg-blue-500 text-white rounded text-sm font-medium hover:bg-blue-600"
                   >
                     Assign
                   </button>
                 )}
-                <button 
-                  onClick={() => handleDelete(m.id)} 
+                <button
+                  onClick={() => handleDelete(m.id)}
                   className="flex-1 px-3 py-2 bg-red-500 text-white rounded text-sm font-medium hover:bg-red-600"
                 >
                   Delete
@@ -262,26 +252,25 @@ const MachineCategory = () => {
                   {!isLabEquipment && <td className="px-4 py-3">{m.plateNumber || 'N/A'}</td>}
                   <td className="px-4 py-3">{m.quantity}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${
-                      m.status === 'available' ? 'bg-green-100 text-green-800' : 
-                      m.status === 'in-use' ? 'bg-yellow-100 text-yellow-800' : 
-                      'bg-red-100 text-red-800'
-                    }`}>
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${m.status === 'available' ? 'bg-green-100 text-green-800' :
+                        m.status === 'in-use' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
+                      }`}>
                       {m.status}
                     </span>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
                       {!isLabEquipment && (
-                        <button 
-                          onClick={() => { setSelectedMachine(m); setShowAssignModal(true); }} 
+                        <button
+                          onClick={() => { setSelectedMachine(m); setShowAssignModal(true); }}
                           className="px-3 py-1.5 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
                         >
                           Assign to Project
                         </button>
                       )}
-                      <button 
-                        onClick={() => handleDelete(m.id)} 
+                      <button
+                        onClick={() => handleDelete(m.id)}
                         className="px-3 py-1.5 bg-red-500 text-white rounded text-sm hover:bg-red-600"
                       >
                         Delete
@@ -301,8 +290,8 @@ const MachineCategory = () => {
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
             <h3 className="text-xl font-bold text-gray-900 mb-4">Assign Machine to Project</h3>
             <p className="text-gray-600 mb-4">Machine: <strong>{selectedMachine?.name}</strong></p>
-            <select 
-              value={assignProjectId} 
+            <select
+              value={assignProjectId}
               onChange={(e) => setAssignProjectId(e.target.value)}
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
@@ -312,13 +301,13 @@ const MachineCategory = () => {
               ))}
             </select>
             <div className="flex gap-3">
-              <button 
+              <button
                 onClick={handleAssignMachine}
                 className="flex-1 px-4 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium"
               >
                 Assign
               </button>
-              <button 
+              <button
                 onClick={() => { setShowAssignModal(false); setSelectedMachine(null); setAssignProjectId(''); }}
                 className="flex-1 px-4 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
               >

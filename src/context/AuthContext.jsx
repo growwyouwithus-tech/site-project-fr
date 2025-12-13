@@ -1,13 +1,30 @@
 /**
  * Authentication Context
  * Manages user authentication state across the application
+ * Frontend-only version: stores auth data in sessionStorage (no backend required)
  */
 
 import { createContext, useContext, useState, useEffect } from 'react';
-import api from '../services/api';
-import { connectSocket, disconnectSocket } from '../services/socket';
 
 const AuthContext = createContext();
+
+// Hardcoded demo users (matches previous backend demo credentials)
+const MOCK_USERS = [
+  {
+    id: '1',
+    name: 'Admin User',
+    email: 'admin@construction.com',
+    role: 'admin',
+    password: 'password123'
+  },
+  {
+    id: '2',
+    name: 'Rajesh Kumar',
+    email: 'rajesh@construction.com',
+    role: 'sitemanager',
+    password: 'manager123'
+  }
+];
 
 // Custom hook to use auth context
 export const useAuth = () => {
@@ -23,57 +40,45 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Check if user is logged in on mount
+  // Check if user is logged in on mount (sessionStorage acts as session)
   useEffect(() => {
-    checkAuth();
+    const storedUser = sessionStorage.getItem('auth_user');
+    if (storedUser) {
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (error) {
+        console.error('Failed to parse stored user', error);
+        sessionStorage.removeItem('auth_user');
+      }
+    }
+    setLoading(false);
   }, []);
 
-  // Check authentication status
-  const checkAuth = async () => {
-    try {
-      const response = await api.get('/auth/me');
-      if (response.data.success) {
-        setUser(response.data.user);
-        // Connect socket
-        connectSocket(response.data.user.id);
-      }
-    } catch (error) {
-      console.log('Not authenticated');
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Login function
+  // Login function (frontend-only, validates against mock users)
   const login = async (email, password) => {
-    try {
-      const response = await api.post('/auth/login', { email, password });
-      if (response.data.success) {
-        setUser(response.data.user);
-        // Connect socket
-        connectSocket(response.data.user.id);
-        return { success: true };
-      }
-    } catch (error) {
+    const foundUser = MOCK_USERS.find(
+      (u) => u.email === email.trim().toLowerCase() && u.password === password
+    );
+
+    if (!foundUser) {
       return {
         success: false,
-        error: error.response?.data?.error || 'Login failed'
+        error: 'Invalid email or password'
       };
     }
+
+    const { password: _, ...userData } = foundUser;
+    sessionStorage.setItem('auth_user', JSON.stringify(userData));
+    setUser(userData);
+
+    return { success: true };
   };
 
-  // Logout function
+  // Logout function (clears sessionStorage)
   const logout = async () => {
-    try {
-      await api.post('/auth/logout');
-      setUser(null);
-      // Disconnect socket
-      disconnectSocket();
-      window.location.href = '/';
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
+    sessionStorage.removeItem('auth_user');
+    setUser(null);
+    window.location.href = '/';
   };
 
   const value = {

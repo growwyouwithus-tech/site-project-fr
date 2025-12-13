@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '../../services/api';
+import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
 import { showToast } from '../../components/Toast';
 import Camera from '../../components/Camera';
 
@@ -10,22 +10,17 @@ const SMAttendance = () => {
   const [formData, setFormData] = useState({ date: new Date().toISOString().split('T')[0], projectId: '', photo: '', remarks: '' });
 
   useEffect(() => {
+    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = async () => {
-    try {
-      const [attRes, projRes] = await Promise.all([
-        api.get('/site/attendance'),
-        api.get('/site/projects')
-      ]);
-      setAttendance(attRes.data.data || []);
-      setProjects(projRes.data.data || []);
-      if (projRes.data.data.length > 0) {
-        setFormData(prev => ({ ...prev, projectId: projRes.data.data[0].id }));
-      }
-    } catch (error) {
-      showToast('Failed to load data', 'error');
+  const fetchData = () => {
+    const att = getCollection('attendanceSite', []);
+    const proj = getCollection('projects', []);
+    setAttendance(att);
+    setProjects(proj);
+    if (proj.length > 0) {
+      setFormData(prev => ({ ...prev, projectId: proj[0].id }));
     }
   };
 
@@ -34,20 +29,22 @@ const SMAttendance = () => {
     setShowCamera(false);
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.photo) {
       showToast('Please capture a photo', 'error');
       return;
     }
-    try {
-      await api.post('/site/attendance', { ...formData, time: new Date().toISOString() });
-      showToast('Attendance marked successfully', 'success');
-      setFormData({ date: new Date().toISOString().split('T')[0], projectId: projects[0]?.id || '', photo: '', remarks: '' });
-      fetchData();
-    } catch (error) {
-      showToast('Failed to mark attendance', 'error');
-    }
+    const record = {
+      id: generateId(),
+      ...formData,
+      time: new Date().toISOString()
+    };
+    const updated = [...getCollection('attendanceSite', []), record];
+    saveCollection('attendanceSite', updated);
+    showToast('Attendance marked successfully', 'success');
+    setFormData({ date: new Date().toISOString().split('T')[0], projectId: projects[0]?.id || '', photo: '', remarks: '' });
+    setAttendance(updated);
   };
 
   return (
@@ -58,11 +55,11 @@ const SMAttendance = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
-            <input type="date" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input type="date" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Project</label>
-            <select value={formData.projectId} onChange={(e) => setFormData({...formData, projectId: e.target.value})} required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <select value={formData.projectId} onChange={(e) => setFormData({ ...formData, projectId: e.target.value })} required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
@@ -76,7 +73,7 @@ const SMAttendance = () => {
         </div>
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">Remarks (optional)</label>
-          <input type="text" value={formData.remarks} onChange={(e) => setFormData({...formData, remarks: e.target.value})} placeholder="Any remarks" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="text" value={formData.remarks} onChange={(e) => setFormData({ ...formData, remarks: e.target.value })} placeholder="Any remarks" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
         <button type="submit" className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-semibold">
           Mark Attendance
@@ -87,7 +84,7 @@ const SMAttendance = () => {
 
       <div className="mt-6 bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
         <h2 className="text-xl font-bold text-gray-900 mb-4">My Attendance History</h2>
-        
+
         {/* Mobile View */}
         <div className="block md:hidden space-y-3">
           {attendance.map(a => (

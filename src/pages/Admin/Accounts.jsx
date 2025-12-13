@@ -1,21 +1,32 @@
 import { useState, useEffect } from 'react';
-import api from '../../services/api';
-import { showToast } from '../../components/Toast';
+import { ensureSeedData, getCollection } from '../../services/storage';
 
 const Accounts = () => {
   const [data, setData] = useState(null);
 
   useEffect(() => {
+    ensureSeedData();
     fetchAccounts();
   }, []);
 
-  const fetchAccounts = async () => {
-    try {
-      const res = await api.get('/admin/accounts');
-      setData(res.data.data);
-    } catch (error) {
-      showToast('Failed to load accounts', 'error');
-    }
+  const fetchAccounts = () => {
+    const expenses = getCollection('expenses', []);
+    const accounts = getCollection('accounts', { capital: 0 });
+    const bankTransactions = getCollection('bankTransactions', []);
+    const cashTransactions = getCollection('cashTransactions', []);
+
+    const totalExpenses = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const totalBankTransactions = bankTransactions.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const totalCashTransactions = cashTransactions.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+
+    setData({
+      capital: accounts.capital || 0,
+      totalExpenses,
+      totalBankTransactions,
+      totalCashTransactions,
+      bankTransactions,
+      cashTransactions
+    });
   };
 
   return (
@@ -43,7 +54,7 @@ const Accounts = () => {
 
       <div className="bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Recent Bank Transactions</h2>
-        
+
         {/* Mobile View */}
         <div className="block md:hidden space-y-3">
           {data?.bankTransactions?.slice(0, 10).map(t => (

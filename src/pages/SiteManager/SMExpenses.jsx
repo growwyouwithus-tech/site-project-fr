@@ -1,42 +1,47 @@
 import { useState, useEffect } from 'react';
-import api from '../../services/api';
+import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
 import { showToast } from '../../components/Toast';
 
 const SMExpenses = () => {
   const [projects, setProjects] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({ projectId: '', name: '', amount: '', voucherNumber: '', remarks: '' });
+  const [formData, setFormData] = useState({ projectId: '', name: '', amount: '', voucherNumber: '', remarks: '', receipt: '' });
 
   useEffect(() => {
+    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = async () => {
-    try {
-      const [projRes, expRes] = await Promise.all([
-        api.get('/site/projects'),
-        api.get('/site/expenses')
-      ]);
-      setProjects(projRes.data.data || []);
-      setExpenses(expRes.data.data || []);
-      if (projRes.data.data.length > 0) setFormData(prev => ({ ...prev, projectId: projRes.data.data[0].id }));
-    } catch (error) {
-      showToast('Failed to load data', 'error');
-    }
+  const fetchData = () => {
+    const proj = getCollection('projects', []);
+    const exp = getCollection('expenses', []);
+    setProjects(proj);
+    setExpenses(exp);
+    if (proj.length > 0) setFormData(prev => ({ ...prev, projectId: proj[0].id }));
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    try {
-      await api.post('/site/expenses', formData);
-      showToast('Expense added successfully', 'success');
-      setShowForm(false);
-      setFormData({ projectId: projects[0]?.id || '', name: '', amount: '', voucherNumber: '', remarks: '' });
-      fetchData();
-    } catch (error) {
-      showToast('Failed to add expense', 'error');
-    }
+    const record = {
+      id: generateId(),
+      ...formData,
+      amount: Number(formData.amount) || 0,
+      createdAt: new Date().toISOString()
+    };
+    const updated = [...getCollection('expenses', []), record];
+    saveCollection('expenses', updated);
+    showToast('Expense added successfully', 'success');
+    setShowForm(false);
+    setFormData({ projectId: projects[0]?.id || '', name: '', amount: '', voucherNumber: '', remarks: '', receipt: '' });
+    setExpenses(updated);
+  };
+
+  const handleReceipt = (file) => {
+    if (!file) return setFormData(prev => ({ ...prev, receipt: '' }));
+    const reader = new FileReader();
+    reader.onload = () => setFormData(prev => ({ ...prev, receipt: reader.result }));
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -51,25 +56,30 @@ const SMExpenses = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Project</label>
-              <select value={formData.projectId} onChange={(e) => setFormData({...formData, projectId: e.target.value})} required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <select value={formData.projectId} onChange={(e) => setFormData({ ...formData, projectId: e.target.value })} required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Expense Name</label>
-              <input type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="e.g., Material Purchase" required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g., Material Purchase" required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Amount (₹)</label>
-              <input type="number" value={formData.amount} onChange={(e) => setFormData({...formData, amount: e.target.value})} placeholder="Amount" required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <input type="number" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} placeholder="Amount" required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Voucher Number</label>
-              <input type="text" value={formData.voucherNumber} onChange={(e) => setFormData({...formData, voucherNumber: e.target.value})} placeholder="Optional" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <input type="text" value={formData.voucherNumber} onChange={(e) => setFormData({ ...formData, voucherNumber: e.target.value })} placeholder="Optional" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Upload Receipt</label>
+              <input type="file" accept="image/*" onChange={(e) => handleReceipt(e.target.files?.[0])} className="w-full" />
+              {formData.receipt && <img src={formData.receipt} alt="Receipt" className="mt-2 h-24 w-24 object-cover rounded border" />}
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">Remarks</label>
-              <textarea value={formData.remarks} onChange={(e) => setFormData({...formData, remarks: e.target.value})} placeholder="Optional remarks" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]" />
+              <textarea value={formData.remarks} onChange={(e) => setFormData({ ...formData, remarks: e.target.value })} placeholder="Optional remarks" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]" />
             </div>
           </div>
           <button type="submit" className="mt-5 px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-semibold">
@@ -80,7 +90,7 @@ const SMExpenses = () => {
 
       <div className="mt-6 bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Expense Records</h2>
-        
+
         {/* Mobile View */}
         <div className="block md:hidden space-y-3">
           {expenses.map(e => (

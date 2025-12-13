@@ -1,96 +1,89 @@
 import { useState, useEffect } from 'react';
-import api from '../../services/api';
 import { showToast } from '../../components/Toast';
+import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
 
 const Expenses = () => {
   const [expenses, setExpenses] = useState([]);
   const [projects, setProjects] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [selectedProject, setSelectedProject] = useState('all');
-  const [formData, setFormData] = useState({ 
-    projectId: '', 
-    name: '', 
-    amount: '', 
-    voucherNumber: '', 
+  const [formData, setFormData] = useState({
+    projectId: '',
+    name: '',
+    amount: '',
+    voucherNumber: '',
     category: 'material',
-    remarks: '' 
+    remarks: ''
   });
 
   useEffect(() => {
-    fetchExpenses();
+    ensureSeedData();
     fetchProjects();
+    fetchExpenses();
   }, []);
 
   const fetchExpenses = async () => {
-    try {
-      const res = await api.get('/admin/expenses');
-      setExpenses(res.data.data || []);
-    } catch (error) {
-      showToast('Failed to load expenses', 'error');
-    }
+    const stored = getCollection('expenses', []);
+    setExpenses(stored);
   };
 
   const fetchProjects = async () => {
-    try {
-      const res = await api.get('/admin/projects');
-      setProjects(res.data.data || []);
-      if (res.data.data.length > 0) {
-        setFormData(prev => ({ ...prev, projectId: res.data.data[0].id }));
-      }
-    } catch (error) {
-      console.error('Failed to load projects');
+    const stored = getCollection('projects', []);
+    setProjects(stored);
+    if (stored.length > 0) {
+      setFormData(prev => ({ ...prev, projectId: stored[0].id }));
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    try {
-      await api.post('/admin/expenses', formData);
-      showToast('Expense added successfully', 'success');
-      setShowForm(false);
-      setFormData({ 
-        projectId: projects[0]?.id || '', 
-        name: '', 
-        amount: '', 
-        voucherNumber: '', 
-        category: 'material',
-        remarks: '' 
-      });
-      fetchExpenses();
-    } catch (error) {
-      showToast('Failed to add expense', 'error');
-    }
+    const newExpense = {
+      ...formData,
+      id: generateId(),
+      amount: Number(formData.amount) || 0,
+      createdAt: new Date().toISOString()
+    };
+    const updated = [...getCollection('expenses', []), newExpense];
+    saveCollection('expenses', updated);
+    showToast('Expense added successfully', 'success');
+    setShowForm(false);
+    setFormData({
+      projectId: projects[0]?.id || '',
+      name: '',
+      amount: '',
+      voucherNumber: '',
+      category: 'material',
+      remarks: ''
+    });
+    setExpenses(updated);
   };
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this expense?')) return;
-    try {
-      await api.delete(`/admin/expenses/${id}`);
-      showToast('Expense deleted', 'success');
-      fetchExpenses();
-    } catch (error) {
-      showToast('Failed to delete expense', 'error');
-    }
+    const updated = getCollection('expenses', []).filter(e => e.id !== id);
+    saveCollection('expenses', updated);
+    showToast('Expense deleted', 'success');
+    setExpenses(updated);
   };
 
-  const filteredExpenses = selectedProject === 'all' 
-    ? expenses 
+  const filteredExpenses = selectedProject === 'all'
+    ? expenses
     : expenses.filter(e => e.projectId === selectedProject);
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
       <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-6">Expenses</h1>
-      
+
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
-        <button 
-          onClick={() => setShowForm(!showForm)} 
+        <button
+          onClick={() => setShowForm(!showForm)}
           className="px-5 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
         >
           {showForm ? 'Cancel' : 'Add Expense'}
         </button>
-        
-        <select 
-          value={selectedProject} 
+
+        <select
+          value={selectedProject}
           onChange={(e) => setSelectedProject(e.target.value)}
           className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
@@ -106,10 +99,10 @@ const Expenses = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Project</label>
-              <select 
-                value={formData.projectId} 
-                onChange={(e) => setFormData({...formData, projectId: e.target.value})} 
-                required 
+              <select
+                value={formData.projectId}
+                onChange={(e) => setFormData({ ...formData, projectId: e.target.value })}
+                required
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -117,31 +110,31 @@ const Expenses = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Expense Name</label>
-              <input 
-                type="text" 
-                value={formData.name} 
-                onChange={(e) => setFormData({...formData, name: e.target.value})} 
-                placeholder="e.g., Cement Purchase" 
-                required 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="e.g., Cement Purchase"
+                required
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Amount (₹)</label>
-              <input 
-                type="number" 
-                value={formData.amount} 
-                onChange={(e) => setFormData({...formData, amount: e.target.value})} 
-                placeholder="Amount" 
-                required 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <input
+                type="number"
+                value={formData.amount}
+                onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                placeholder="Amount"
+                required
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
-              <select 
-                value={formData.category} 
-                onChange={(e) => setFormData({...formData, category: e.target.value})} 
+              <select
+                value={formData.category}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="material">Material</option>
@@ -153,22 +146,23 @@ const Expenses = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Voucher Number</label>
-              <input 
-                type="text" 
-                value={formData.voucherNumber} 
-                onChange={(e) => setFormData({...formData, voucherNumber: e.target.value})} 
-                placeholder="Optional" 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <input
+                type="text"
+                value={formData.voucherNumber}
+                onChange={(e) => setFormData({ ...formData, voucherNumber: e.target.value })}
+                placeholder="Required"
+                required
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Remarks</label>
-              <input 
-                type="text" 
-                value={formData.remarks} 
-                onChange={(e) => setFormData({...formData, remarks: e.target.value})} 
-                placeholder="Optional remarks" 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <input
+                type="text"
+                value={formData.remarks}
+                onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+                placeholder="Optional remarks"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -182,7 +176,7 @@ const Expenses = () => {
         <h2 className="text-xl font-bold text-gray-900 mb-4">
           {selectedProject === 'all' ? 'All Expenses' : 'Project Expenses'}
         </h2>
-        
+
         {/* Mobile View */}
         <div className="block md:hidden space-y-3">
           {filteredExpenses.map(e => (
@@ -195,11 +189,11 @@ const Expenses = () => {
                 <div><span className="font-medium">Voucher:</span> {e.voucherNumber || 'N/A'}</div>
                 <div><span className="font-medium">Date:</span> {new Date(e.createdAt).toLocaleDateString()}</div>
               </div>
-              <button 
-                onClick={() => handleDelete(e.id)} 
-                className="mt-3 w-full px-3 py-2 bg-red-500 text-white rounded text-sm font-medium hover:bg-red-600"
+              <button
+                onClick={() => alert('Edit coming soon')}
+                className="mt-3 w-full px-3 py-2 bg-blue-500 text-white rounded text-sm font-medium hover:bg-blue-600"
               >
-                Delete
+                Edit
               </button>
             </div>
           ))}
@@ -229,11 +223,11 @@ const Expenses = () => {
                   <td className="px-4 py-3">{e.voucherNumber || 'N/A'}</td>
                   <td className="px-4 py-3">{new Date(e.createdAt).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
-                    <button 
-                      onClick={() => handleDelete(e.id)} 
-                      className="px-3 py-1.5 bg-red-500 text-white rounded text-sm hover:bg-red-600"
+                    <button
+                      onClick={() => alert('Edit coming soon')}
+                      className="px-3 py-1.5 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
                     >
-                      Delete
+                      Edit
                     </button>
                   </td>
                 </tr>

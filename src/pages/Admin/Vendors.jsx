@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '../../services/api';
+import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
 import { showToast } from '../../components/Toast';
 
 const Vendors = () => {
@@ -15,40 +15,37 @@ const Vendors = () => {
   };
 
   useEffect(() => {
+    ensureSeedData();
     fetchVendors();
   }, []);
 
-  const fetchVendors = async () => {
-    try {
-      const res = await api.get('/admin/vendors');
-      setVendors(res.data.data || []);
-    } catch (error) {
-      showToast('Failed to load vendors', 'error');
-    }
+  const fetchVendors = () => {
+    const stored = getCollection('vendors', []);
+    setVendors(stored);
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    try {
-      const vendorData = {
-        ...formData,
-        vendorId: generateVendorId()
-      };
-      await api.post('/admin/vendors', vendorData);
-      showToast('Vendor created successfully', 'success');
-      setShowForm(false);
-      setFormData({ name: '', contact: '', email: '', address: '' });
-      fetchVendors();
-    } catch (error) {
-      showToast('Failed to create vendor', 'error');
-    }
+    const vendorData = {
+      id: generateId(),
+      ...formData,
+      vendorId: generateVendorId(),
+      pendingAmount: 0,
+      totalSupplied: 0
+    };
+    const updated = [...getCollection('vendors', []), vendorData];
+    saveCollection('vendors', updated);
+    showToast('Vendor created successfully', 'success');
+    setShowForm(false);
+    setFormData({ name: '', contact: '', email: '', address: '' });
+    setVendors(updated);
   };
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
       <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-6">Vendor Management</h1>
-      <button 
-        onClick={() => setShowForm(!showForm)} 
+      <button
+        onClick={() => setShowForm(!showForm)}
         className="px-5 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
       >
         {showForm ? 'Cancel' : 'Add Vendor'}
@@ -59,44 +56,44 @@ const Vendors = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Vendor Name</label>
-              <input 
-                type="text" 
-                placeholder="Vendor Name" 
-                value={formData.name} 
-                onChange={(e) => setFormData({...formData, name: e.target.value})} 
-                required 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <input
+                type="text"
+                placeholder="Vendor Name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Contact Number</label>
-              <input 
-                type="tel" 
-                placeholder="Contact Number" 
-                value={formData.contact} 
-                onChange={(e) => setFormData({...formData, contact: e.target.value})} 
-                required 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <input
+                type="tel"
+                placeholder="Contact Number"
+                value={formData.contact}
+                onChange={(e) => setFormData({ ...formData, contact: e.target.value })}
+                required
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-              <input 
-                type="email" 
-                placeholder="Email (optional)" 
-                value={formData.email} 
-                onChange={(e) => setFormData({...formData, email: e.target.value})} 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <input
+                type="email"
+                placeholder="Email (optional)"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
-              <input 
-                type="text" 
-                placeholder="Full Address" 
-                value={formData.address} 
-                onChange={(e) => setFormData({...formData, address: e.target.value})} 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <input
+                type="text"
+                placeholder="Full Address"
+                value={formData.address}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -108,7 +105,7 @@ const Vendors = () => {
 
       <div className="mt-6 bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Vendors List</h2>
-        
+
         {/* Mobile View */}
         <div className="block md:hidden space-y-3">
           {vendors.map(v => (

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '../../services/api';
+import { ensureSeedData, getCollection } from '../../services/storage';
 import { showToast } from '../../components/Toast';
 
 const Profile = () => {
@@ -7,13 +7,18 @@ const Profile = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    ensureSeedData();
     fetchProfile();
   }, []);
 
-  const fetchProfile = async () => {
+  const fetchProfile = () => {
     try {
-      const res = await api.get('/site/profile');
-      setProfile(res.data.data);
+      const user = getCollection('users', []).find(u => u.role === 'sitemanager');
+      if (user) {
+        setProfile(user);
+      } else {
+        setProfile(null);
+      }
     } catch (error) {
       showToast('Failed to load profile', 'error');
     } finally {
@@ -59,9 +64,8 @@ const Profile = () => {
 
           <div>
             <label className="block text-sm font-semibold text-gray-600 mb-2">Status</label>
-            <span className={`inline-block px-3 py-1.5 rounded-lg text-sm font-semibold ${
-              profile.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-            }`}>
+            <span className={`inline-block px-3 py-1.5 rounded-lg text-sm font-semibold ${profile.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+              }`}>
               {profile.active ? 'Active' : 'Inactive'}
             </span>
           </div>

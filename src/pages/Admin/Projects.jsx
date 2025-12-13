@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../../services/api';
 import { showToast } from '../../components/Toast';
+import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
 
 const Projects = () => {
   const [projects, setProjects] = useState([]);
@@ -9,47 +9,47 @@ const Projects = () => {
   const [formData, setFormData] = useState({ name: '', location: '', budget: '', startDate: '', endDate: '' });
 
   useEffect(() => {
+    ensureSeedData();
     fetchProjects();
   }, []);
 
   const fetchProjects = async () => {
-    try {
-      const res = await api.get('/admin/projects');
-      setProjects(res.data.data || []);
-    } catch (error) {
-      showToast('Failed to load projects', 'error');
-    }
+    const stored = getCollection('projects', []);
+    setProjects(stored);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    try {
-      await api.post('/admin/projects', formData);
-      showToast('Project created successfully', 'success');
-      setShowForm(false);
-      setFormData({ name: '', location: '', budget: '', startDate: '', endDate: '' });
-      fetchProjects();
-    } catch (error) {
-      showToast('Failed to create project', 'error');
-    }
+    const newProject = {
+      ...formData,
+      id: generateId(),
+      budget: Number(formData.budget) || 0,
+      status: 'Active'
+    };
+    const updated = [...getCollection('projects', []), newProject];
+    saveCollection('projects', updated);
+    showToast('Project created successfully', 'success');
+    setShowForm(false);
+    setFormData({ name: '', location: '', budget: '', startDate: '', endDate: '' });
+    setProjects(updated);
   };
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this project? This will remove all associated data.')) return;
-    try {
-      await api.delete(`/admin/projects/${id}`);
-      showToast('Project deleted', 'success');
-      fetchProjects();
-    } catch (error) {
-      showToast('Failed to delete project', 'error');
-    }
+    const updated = getCollection('projects', []).filter(p => p.id !== id);
+    saveCollection('projects', updated);
+    // Also delete related expenses
+    const updatedExpenses = getCollection('expenses', []).filter(e => e.projectId !== id);
+    saveCollection('expenses', updatedExpenses);
+    showToast('Project deleted', 'success');
+    setProjects(updated);
   };
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
       <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-6">Projects</h1>
-      <button 
-        onClick={() => setShowForm(!showForm)} 
+      <button
+        onClick={() => setShowForm(!showForm)}
         className="px-5 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
       >
         {showForm ? 'Cancel' : 'Create New Project'}
@@ -59,56 +59,56 @@ const Projects = () => {
         <form onSubmit={handleSubmit} className="mt-5 bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">Project Name</label>
-            <input 
-              type="text" 
-              value={formData.name} 
-              onChange={(e) => setFormData({...formData, name: e.target.value})} 
-              placeholder="e.g., Residential Complex Phase 1" 
-              required 
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder="e.g., Residential Complex Phase 1"
+              required
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
-            <input 
-              type="text" 
-              value={formData.location} 
-              onChange={(e) => setFormData({...formData, location: e.target.value})} 
-              placeholder="e.g., Mumbai, Maharashtra" 
-              required 
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+            <input
+              type="text"
+              value={formData.location}
+              onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+              placeholder="e.g., Mumbai, Maharashtra"
+              required
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">Budget (₹)</label>
-            <input 
-              type="number" 
-              value={formData.budget} 
-              onChange={(e) => setFormData({...formData, budget: e.target.value})} 
-              placeholder="Total project budget" 
-              required 
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+            <input
+              type="number"
+              value={formData.budget}
+              onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+              placeholder="Total project budget"
+              required
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
-              <input 
-                type="date" 
-                value={formData.startDate} 
-                onChange={(e) => setFormData({...formData, startDate: e.target.value})} 
-                required 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <input
+                type="date"
+                value={formData.startDate}
+                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                required
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
-              <input 
-                type="date" 
-                value={formData.endDate} 
-                onChange={(e) => setFormData({...formData, endDate: e.target.value})} 
-                required 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <input
+                type="date"
+                value={formData.endDate}
+                onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                required
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -143,14 +143,14 @@ const Projects = () => {
               </div>
             </div>
             <div className="flex gap-2">
-              <Link 
-                to={`/admin/projects/${p.id}`} 
+              <Link
+                to={`/admin/projects/${p.id}`}
                 className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-center text-sm font-medium"
               >
                 View Details
               </Link>
-              <button 
-                onClick={() => handleDelete(p.id)} 
+              <button
+                onClick={() => handleDelete(p.id)}
                 className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-medium"
               >
                 Delete

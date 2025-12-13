@@ -5,28 +5,40 @@
 
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../../services/api';
-import { showToast } from '../../components/Toast';
+import { ensureSeedData, getCollection } from '../../services/storage';
 
 const Dashboard = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    ensureSeedData();
     fetchDashboard();
   }, []);
 
-  const fetchDashboard = async () => {
-    try {
-      const response = await api.get('/admin/dashboard');
-      if (response.data.success) {
-        setData(response.data.data);
-      }
-    } catch (error) {
-      showToast('Failed to load dashboard', 'error');
-    } finally {
-      setLoading(false);
-    }
+  const fetchDashboard = () => {
+    const projects = getCollection('projects', []);
+    const expenses = getCollection('expenses', []);
+    const users = getCollection('users', []);
+    const labours = getCollection('labours', []);
+
+    const totalProjects = projects.length;
+    const runningProjects = projects.filter(p => (p.status || '').toLowerCase() === 'running' || (p.status || '').toLowerCase() === 'active').length;
+    const completedProjects = projects.filter(p => (p.status || '').toLowerCase() === 'completed').length;
+    const totalSiteManagers = users.filter(u => u.role === 'sitemanager').length;
+    const totalLabours = labours.length;
+    const totalExpenses = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+    setData({
+      totalProjects,
+      runningProjects,
+      completedProjects,
+      totalSiteManagers,
+      totalLabours,
+      totalExpenses,
+      projects
+    });
+    setLoading(false);
   };
 
   if (loading) {
@@ -90,9 +102,8 @@ const Dashboard = () => {
                 <h3 className="text-base md:text-lg font-bold text-gray-900 mb-2">{project.name}</h3>
                 <p className="text-sm text-gray-600 mb-3">📍 {project.location}</p>
                 <div className="flex justify-between items-center flex-wrap gap-2">
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${
-                    project.status === 'running' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
-                  }`}>
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${project.status === 'running' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                    }`}>
                     {project.status}
                   </span>
                   <span className="text-sm text-gray-600 font-medium">

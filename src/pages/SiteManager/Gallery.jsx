@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '../../services/api';
+import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
 import { showToast } from '../../components/Toast';
 import Camera from '../../components/Camera';
 
@@ -11,21 +11,16 @@ const Gallery = () => {
   const [capturedImages, setCapturedImages] = useState([]);
 
   useEffect(() => {
+    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = async () => {
-    try {
-      const [projRes, galRes] = await Promise.all([
-        api.get('/site/projects'),
-        api.get('/site/gallery')
-      ]);
-      setProjects(projRes.data.data || []);
-      setGallery(galRes.data.data || []);
-      if (projRes.data.data.length > 0) setSelectedProject(projRes.data.data[0].id);
-    } catch (error) {
-      showToast('Failed to load data', 'error');
-    }
+  const fetchData = () => {
+    const proj = getCollection('projects', []);
+    const gal = getCollection('gallery', []);
+    setProjects(proj);
+    setGallery(gal);
+    if (proj.length > 0) setSelectedProject(proj[0].id);
   };
 
   const handlePhotoCapture = (photoData) => {
@@ -33,19 +28,22 @@ const Gallery = () => {
     setShowCamera(false);
   };
 
-  const handleUpload = async () => {
+  const handleUpload = () => {
     if (capturedImages.length === 0) {
       showToast('Please capture at least one photo', 'error');
       return;
     }
-    try {
-      await api.post('/site/gallery', { projectId: selectedProject, images: capturedImages });
-      showToast('Images uploaded successfully', 'success');
-      setCapturedImages([]);
-      fetchData();
-    } catch (error) {
-      showToast('Failed to upload images', 'error');
-    }
+    const record = {
+      id: generateId(),
+      projectId: selectedProject,
+      images: capturedImages,
+      createdAt: new Date().toISOString()
+    };
+    const updated = [...getCollection('gallery', []), record];
+    saveCollection('gallery', updated);
+    showToast('Images uploaded successfully', 'success');
+    setCapturedImages([]);
+    setGallery(updated);
   };
 
   return (

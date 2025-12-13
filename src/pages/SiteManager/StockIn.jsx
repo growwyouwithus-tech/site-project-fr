@@ -1,44 +1,56 @@
 import { useState, useEffect } from 'react';
-import api from '../../services/api';
+import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
 import { showToast } from '../../components/Toast';
 
 const StockIn = () => {
+  const units = ['kg', 'ltr', 'bags', 'pcs', 'meter', 'box', 'ton'];
   const [vendors, setVendors] = useState([]);
   const [projects, setProjects] = useState([]);
   const [stocks, setStocks] = useState([]);
-  const [formData, setFormData] = useState({ projectId: '', vendorId: '', materialName: '', unit: '', quantity: '', remarks: '' });
+  const [formData, setFormData] = useState({ projectId: '', vendorId: '', materialName: '', unit: 'kg', quantity: '', unitPrice: '', photo: '', remarks: '' });
 
   useEffect(() => {
+    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = async () => {
-    try {
-      const [vendRes, projRes, stockRes] = await Promise.all([
-        api.get('/site/vendors'),
-        api.get('/site/projects'),
-        api.get('/site/stocks')
-      ]);
-      setVendors(vendRes.data.data || []);
-      setProjects(projRes.data.data || []);
-      setStocks(stockRes.data.data || []);
-      if (projRes.data.data.length > 0) setFormData(prev => ({ ...prev, projectId: projRes.data.data[0].id }));
-      if (vendRes.data.data.length > 0) setFormData(prev => ({ ...prev, vendorId: vendRes.data.data[0].id }));
-    } catch (error) {
-      showToast('Failed to load data', 'error');
-    }
+  const fetchData = () => {
+    const vend = getCollection('vendors', []);
+    const proj = getCollection('projects', []);
+    const stock = getCollection('stocks', []);
+    setVendors(vend);
+    setProjects(proj);
+    setStocks(stock);
+    if (proj.length > 0) setFormData(prev => ({ ...prev, projectId: proj[0].id }));
+    if (vend.length > 0) setFormData(prev => ({ ...prev, vendorId: vend[0].id }));
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    try {
-      await api.post('/site/stock-in', formData);
-      showToast('Stock added successfully', 'success');
-      setFormData({ projectId: projects[0]?.id || '', vendorId: vendors[0]?.id || '', materialName: '', unit: '', quantity: '', remarks: '' });
-      fetchData();
-    } catch (error) {
-      showToast('Failed to add stock', 'error');
-    }
+    const vendor = vendors.find(v => v.id === formData.vendorId);
+    const qty = Number(formData.quantity) || 0;
+    const price = Number(formData.unitPrice) || 0;
+    const record = {
+      id: generateId(),
+      ...formData,
+      quantity: qty,
+      unitPrice: price,
+      totalPrice: qty * price,
+      vendorName: vendor?.name || '',
+      createdAt: new Date().toISOString()
+    };
+    const updated = [...getCollection('stocks', []), record];
+    saveCollection('stocks', updated);
+    showToast('Stock added successfully', 'success');
+    setFormData({ projectId: projects[0]?.id || '', vendorId: vendors[0]?.id || '', materialName: '', unit: 'kg', quantity: '', unitPrice: '', photo: '', remarks: '' });
+    setStocks(updated);
+  };
+
+  const handlePhoto = (file) => {
+    if (!file) return setFormData(prev => ({ ...prev, photo: '' }));
+    const reader = new FileReader();
+    reader.onload = () => setFormData(prev => ({ ...prev, photo: reader.result }));
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -49,31 +61,48 @@ const StockIn = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Project</label>
-            <select value={formData.projectId} onChange={(e) => setFormData({...formData, projectId: e.target.value})} required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <select value={formData.projectId} onChange={(e) => setFormData({ ...formData, projectId: e.target.value })} required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Vendor</label>
-            <select value={formData.vendorId} onChange={(e) => setFormData({...formData, vendorId: e.target.value})} required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <select value={formData.vendorId} onChange={(e) => setFormData({ ...formData, vendorId: e.target.value })} required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
               {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
             </select>
           </div>
           <div className="md:col-span-2 lg:col-span-3">
             <label className="block text-sm font-medium text-gray-700 mb-2">Material Name</label>
-            <input type="text" value={formData.materialName} onChange={(e) => setFormData({...formData, materialName: e.target.value})} placeholder="e.g., Cement, Steel Rods" required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input type="text" value={formData.materialName} onChange={(e) => setFormData({ ...formData, materialName: e.target.value })} placeholder="e.g., Cement, Steel Rods" required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Unit</label>
-            <input type="text" value={formData.unit} onChange={(e) => setFormData({...formData, unit: e.target.value})} placeholder="kg/ltr/bags/ft" required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <select value={formData.unit} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+              {units.map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
-            <input type="number" value={formData.quantity} onChange={(e) => setFormData({...formData, quantity: e.target.value})} placeholder="Quantity" required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input type="number" value={formData.quantity} onChange={(e) => setFormData({ ...formData, quantity: e.target.value })} placeholder="Quantity" required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
-          <div className="md:col-span-2 lg:col-span-1">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Unit Price (₹)</label>
+            <input type="number" value={formData.unitPrice} onChange={(e) => setFormData({ ...formData, unitPrice: e.target.value })} placeholder="Price per unit" required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Total Price (₹)</label>
+            <div className="w-full px-4 py-2.5 border border-gray-200 bg-gray-50 rounded-lg text-gray-800 font-semibold">
+              ₹{((Number(formData.quantity) || 0) * (Number(formData.unitPrice) || 0)).toLocaleString()}
+            </div>
+          </div>
+          <div className="md:col-span-2 lg:col-span-3">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Photo</label>
+            <input type="file" accept="image/*" onChange={(e) => handlePhoto(e.target.files?.[0])} className="w-full" />
+            {formData.photo && <img src={formData.photo} alt="Preview" className="mt-2 h-24 w-24 object-cover rounded border" />}
+          </div>
+          <div className="md:col-span-2 lg:col-span-3">
             <label className="block text-sm font-medium text-gray-700 mb-2">Remarks</label>
-            <input type="text" value={formData.remarks} onChange={(e) => setFormData({...formData, remarks: e.target.value})} placeholder="Optional remarks" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input type="text" value={formData.remarks} onChange={(e) => setFormData({ ...formData, remarks: e.target.value })} placeholder="Optional remarks" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
         </div>
         <button type="submit" className="mt-5 px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-semibold">
@@ -83,7 +112,7 @@ const StockIn = () => {
 
       <div className="mt-6 bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Stock Records</h2>
-        
+
         {/* Mobile View */}
         <div className="block md:hidden space-y-3">
           {stocks.map(s => (
@@ -92,6 +121,8 @@ const StockIn = () => {
               <div className="text-sm space-y-1">
                 <div><span className="font-medium">Project:</span> {s.projectId}</div>
                 <div><span className="font-medium">Quantity:</span> <span className="font-bold text-green-600">{s.quantity} {s.unit}</span></div>
+                <div><span className="font-medium">Unit Price:</span> <span className="text-green-600 font-bold">₹{s.unitPrice?.toLocaleString()}</span></div>
+                <div><span className="font-medium">Total Price:</span> <span className="text-green-700 font-bold">₹{s.totalPrice?.toLocaleString()}</span></div>
                 <div><span className="font-medium">Vendor:</span> {s.vendorName || 'N/A'}</div>
                 <div><span className="font-medium">Date:</span> {new Date(s.createdAt).toLocaleDateString()}</div>
               </div>
@@ -108,6 +139,8 @@ const StockIn = () => {
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Material</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Quantity</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Unit</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Unit Price</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Total Price</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Vendor</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Date</th>
               </tr>
@@ -119,6 +152,8 @@ const StockIn = () => {
                   <td className="px-4 py-3 font-medium">{s.materialName}</td>
                   <td className="px-4 py-3 font-bold text-green-600">{s.quantity}</td>
                   <td className="px-4 py-3">{s.unit}</td>
+                  <td className="px-4 py-3 text-green-600 font-bold">₹{s.unitPrice?.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-green-700 font-bold">₹{s.totalPrice?.toLocaleString()}</td>
                   <td className="px-4 py-3">{s.vendorName || 'N/A'}</td>
                   <td className="px-4 py-3">{new Date(s.createdAt).toLocaleDateString()}</td>
                 </tr>

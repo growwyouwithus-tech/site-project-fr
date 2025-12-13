@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '../../services/api';
+import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
 import { showToast } from '../../components/Toast';
 
 const Transfer = () => {
@@ -10,41 +10,50 @@ const Transfer = () => {
   const [formData, setFormData] = useState({ type: 'labour', itemId: '', fromProject: '', toProject: '', quantity: 1 });
 
   useEffect(() => {
+    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = async () => {
-    try {
-      const [transRes, projRes, labRes] = await Promise.all([
-        api.get('/admin/transfers'),
-        api.get('/admin/projects'),
-        api.get('/admin/labours')
-      ]);
-      setTransfers(transRes.data.data || []);
-      setProjects(projRes.data.data || []);
-      setLabours(labRes.data.data || []);
-    } catch (error) {
-      showToast('Failed to load data', 'error');
+  const fetchData = () => {
+    const storedTransfers = getCollection('transfers', []);
+    const storedProjects = getCollection('projects', []);
+    const storedLabours = getCollection('labours', []);
+    setTransfers(storedTransfers);
+    setProjects(storedProjects);
+    setLabours(storedLabours);
+    if (storedProjects.length > 0) {
+      setFormData(prev => ({
+        ...prev,
+        fromProject: prev.fromProject || storedProjects[0].id,
+        toProject: prev.toProject || storedProjects[0].id
+      }));
+    }
+    if (storedLabours.length > 0 && formData.type === 'labour') {
+      setFormData(prev => ({ ...prev, itemId: prev.itemId || storedLabours[0].id }));
     }
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    try {
-      await api.post('/admin/transfers', formData);
-      showToast('Transfer completed', 'success');
-      setShowForm(false);
-      fetchData();
-    } catch (error) {
-      showToast('Transfer failed', 'error');
-    }
+    const newTransfer = {
+      id: generateId(),
+      ...formData,
+      status: 'completed',
+      createdAt: new Date().toISOString()
+    };
+    const updated = [...getCollection('transfers', []), newTransfer];
+    saveCollection('transfers', updated);
+    showToast('Transfer completed', 'success');
+    setShowForm(false);
+    setFormData({ type: 'labour', itemId: '', fromProject: projects[0]?.id || '', toProject: projects[0]?.id || '', quantity: 1 });
+    setTransfers(updated);
   };
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
       <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-6">Resource Transfer</h1>
-      <button 
-        onClick={() => setShowForm(!showForm)} 
+      <button
+        onClick={() => setShowForm(!showForm)}
         className="px-5 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
       >
         {showForm ? 'Cancel' : 'New Transfer'}
@@ -55,9 +64,9 @@ const Transfer = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Transfer Type</label>
-              <select 
-                value={formData.type} 
-                onChange={(e) => setFormData({...formData, type: e.target.value})} 
+              <select
+                value={formData.type}
+                onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="labour">Labour</option>
@@ -68,10 +77,10 @@ const Transfer = () => {
             {formData.type === 'labour' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Select Labour</label>
-                <select 
-                  value={formData.itemId} 
-                  onChange={(e) => setFormData({...formData, itemId: e.target.value})} 
-                  required 
+                <select
+                  value={formData.itemId}
+                  onChange={(e) => setFormData({ ...formData, itemId: e.target.value })}
+                  required
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select Labour</option>
@@ -81,10 +90,10 @@ const Transfer = () => {
             )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">From Project</label>
-              <select 
-                value={formData.fromProject} 
-                onChange={(e) => setFormData({...formData, fromProject: e.target.value})} 
-                required 
+              <select
+                value={formData.fromProject}
+                onChange={(e) => setFormData({ ...formData, fromProject: e.target.value })}
+                required
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">From Project</option>
@@ -93,10 +102,10 @@ const Transfer = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">To Project</label>
-              <select 
-                value={formData.toProject} 
-                onChange={(e) => setFormData({...formData, toProject: e.target.value})} 
-                required 
+              <select
+                value={formData.toProject}
+                onChange={(e) => setFormData({ ...formData, toProject: e.target.value })}
+                required
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">To Project</option>
@@ -112,7 +121,7 @@ const Transfer = () => {
 
       <div className="mt-6 bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Transfer History</h2>
-        
+
         {/* Mobile View */}
         <div className="block md:hidden space-y-3">
           {transfers.map(t => (

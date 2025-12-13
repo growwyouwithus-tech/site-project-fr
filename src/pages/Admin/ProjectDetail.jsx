@@ -1,25 +1,47 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import api from '../../services/api';
+import { useParams, Link } from 'react-router-dom';
+import { ensureSeedData, getCollection } from '../../services/storage';
 
 const ProjectDetail = () => {
   const { id } = useParams();
   const [data, setData] = useState(null);
 
   useEffect(() => {
+    ensureSeedData();
     fetchProject();
   }, [id]);
 
   const fetchProject = async () => {
-    try {
-      const res = await api.get(`/admin/projects/${id}`);
-      setData(res.data.data);
-    } catch (error) {
-      console.error(error);
+    const projects = getCollection('projects', []);
+    const expenses = getCollection('expenses', []);
+    const stocks = getCollection('stocks', []);
+    const machines = getCollection('machines', []);
+
+    const project = projects.find(p => p.id === id);
+    if (!project) {
+      setData(null);
+      return;
     }
+
+    const projectExpenses = expenses.filter(e => e.projectId === id);
+    const projectStocks = stocks.filter(s => s.projectId === id);
+    const projectMachines = machines.filter(m => m.projectId === id);
+
+    setData({
+      project,
+      expenses: projectExpenses,
+      stocks: projectStocks,
+      machines: projectMachines,
+      labours: [] // placeholder since labours are not stored in session demo
+    });
   };
 
-  if (!data) return <div className="p-8 text-center text-gray-500">Loading...</div>;
+  if (!data) return (
+    <div className="p-8 text-center text-gray-500">
+      <p>Project not found.</p>
+      <Link to="/admin/projects" className="text-blue-500 font-medium">Back to Projects</Link>
+    </div>
+  );
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
@@ -69,9 +91,8 @@ const ProjectDetail = () => {
                       {machine.plateNumber && ` | Plate: ${machine.plateNumber}`}
                     </p>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                    machine.status === 'in-use' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
-                  }`}>
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${machine.status === 'in-use' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
+                    }`}>
                     {machine.status}
                   </span>
                 </div>

@@ -1,25 +1,35 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../../services/api';
-import { showToast } from '../../components/Toast';
+import { ensureSeedData, getCollection } from '../../services/storage';
 
 const SMDashboard = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    ensureSeedData();
     fetchDashboard();
   }, []);
 
-  const fetchDashboard = async () => {
-    try {
-      const res = await api.get('/site/dashboard');
-      setData(res.data.data);
-    } catch (error) {
-      showToast('Failed to load dashboard', 'error');
-    } finally {
-      setLoading(false);
-    }
+  const fetchDashboard = () => {
+    const user = getCollection('users', []).find(u => u.role === 'sitemanager') || {};
+    const projects = getCollection('projects', []);
+    const labours = getCollection('labours', []);
+    const notifications = getCollection('notifications', []).filter(n => n.recipientRole === 'sitemanager');
+    const attendance = getCollection('attendanceSite', []);
+
+    const assignedProjects = projects.filter(p => user.assignedSites ? user.assignedSites.includes(p.id) : true);
+    const today = new Date().toISOString().split('T')[0];
+    const todayAttendance = attendance.filter(a => a.date === today);
+
+    setData({
+      user,
+      assignedProjects,
+      labourCount: labours.length,
+      todayAttendance,
+      notifications
+    });
+    setLoading(false);
   };
 
   if (loading) return <div className="p-8 text-center text-gray-500">Loading...</div>;

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '../../services/api';
+import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
 import { showToast } from '../../components/Toast';
 
 const Notifications = () => {
@@ -9,43 +9,41 @@ const Notifications = () => {
   const [formData, setFormData] = useState({ recipientId: '', message: '', type: 'general' });
 
   useEffect(() => {
+    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = async () => {
-    try {
-      const [notifRes, usersRes] = await Promise.all([
-        api.get('/admin/notifications'),
-        api.get('/admin/users?role=sitemanager')
-      ]);
-      setNotifications(notifRes.data.data || []);
-      setUsers(usersRes.data.data || []);
-    } catch (error) {
-      showToast('Failed to load data', 'error');
+  const fetchData = () => {
+    const notif = getCollection('notifications', []);
+    const siteManagers = getCollection('users', []).filter(u => u.role === 'sitemanager');
+    setNotifications(notif);
+    setUsers(siteManagers);
+    if (!formData.recipientId && siteManagers.length > 0) {
+      setFormData(prev => ({ ...prev, recipientId: siteManagers[0].id }));
     }
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    try {
-      await api.post('/admin/notifications', {
-        ...formData,
-        recipientRole: 'sitemanager'
-      });
-      showToast('Notification sent successfully', 'success');
-      setShowForm(false);
-      setFormData({ recipientId: '', message: '', type: 'general' });
-      fetchData();
-    } catch (error) {
-      showToast('Failed to send notification', 'error');
-    }
+    const newNotif = {
+      id: generateId(),
+      ...formData,
+      recipientRole: 'sitemanager',
+      createdAt: new Date().toISOString()
+    };
+    const updated = [...getCollection('notifications', []), newNotif];
+    saveCollection('notifications', updated);
+    showToast('Notification sent successfully', 'success');
+    setShowForm(false);
+    setFormData({ recipientId: users[0]?.id || '', message: '', type: 'general' });
+    setNotifications(updated);
   };
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
       <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-6">Notifications</h1>
-      <button 
-        onClick={() => setShowForm(!showForm)} 
+      <button
+        onClick={() => setShowForm(!showForm)}
         className="px-5 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
       >
         {showForm ? 'Cancel' : 'Send Notification'}
@@ -55,9 +53,9 @@ const Notifications = () => {
         <form onSubmit={handleSubmit} className="mt-5 bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">Recipient</label>
-            <select 
-              value={formData.recipientId} 
-              onChange={(e) => setFormData({...formData, recipientId: e.target.value})} 
+            <select
+              value={formData.recipientId}
+              onChange={(e) => setFormData({ ...formData, recipientId: e.target.value })}
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Broadcast to All Site Managers</option>
@@ -66,19 +64,19 @@ const Notifications = () => {
           </div>
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">Message</label>
-            <textarea 
-              placeholder="Type your message here..." 
-              value={formData.message} 
-              onChange={(e) => setFormData({...formData, message: e.target.value})} 
-              required 
+            <textarea
+              placeholder="Type your message here..."
+              value={formData.message}
+              onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+              required
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px]"
             />
           </div>
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
-            <select 
-              value={formData.type} 
-              onChange={(e) => setFormData({...formData, type: e.target.value})} 
+            <select
+              value={formData.type}
+              onChange={(e) => setFormData({ ...formData, type: e.target.value })}
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="general">General</option>
@@ -107,9 +105,8 @@ const Notifications = () => {
                   {new Date(n.createdAt).toLocaleString()}
                 </p>
               </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
-                n.read ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-              }`}>
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${n.read ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                }`}>
                 {n.read ? 'Read' : 'Unread'}
               </span>
             </div>

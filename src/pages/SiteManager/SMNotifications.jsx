@@ -1,30 +1,26 @@
 import { useState, useEffect } from 'react';
-import api from '../../services/api';
+import { ensureSeedData, getCollection, saveCollection } from '../../services/storage';
 import { showToast } from '../../components/Toast';
 
 const SMNotifications = () => {
   const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
+    ensureSeedData();
     fetchNotifications();
   }, []);
 
-  const fetchNotifications = async () => {
-    try {
-      const res = await api.get('/site/notifications');
-      setNotifications(res.data.data || []);
-    } catch (error) {
-      showToast('Failed to load notifications', 'error');
-    }
+  const fetchNotifications = () => {
+    const all = getCollection('notifications', []);
+    const siteNotes = all.filter(n => n.recipientRole === 'sitemanager');
+    setNotifications(siteNotes);
   };
 
-  const markAsRead = async (id) => {
-    try {
-      await api.put(`/site/notifications/${id}/read`);
-      fetchNotifications();
-    } catch (error) {
-      console.error(error);
-    }
+  const markAsRead = (id) => {
+    const all = getCollection('notifications', []);
+    const updatedAll = all.map(n => n.id === id ? { ...n, read: true } : n);
+    saveCollection('notifications', updatedAll);
+    setNotifications(updatedAll.filter(n => n.recipientRole === 'sitemanager'));
   };
 
   return (
@@ -37,16 +33,14 @@ const SMNotifications = () => {
             {notifications.map(n => (
               <div
                 key={n.id}
-                className={`p-4 md:p-5 cursor-pointer hover:bg-gray-50 transition-colors ${
-                  n.read ? 'bg-white' : 'bg-blue-50'
-                }`}
+                className={`p-4 md:p-5 cursor-pointer hover:bg-gray-50 transition-colors ${n.read ? 'bg-white' : 'bg-blue-50'
+                  }`}
                 onClick={() => !n.read && markAsRead(n.id)}
               >
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 mb-3">
                   <div className="flex flex-wrap gap-2">
-                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold capitalize ${
-                      n.type === 'urgent' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
-                    }`}>
+                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold capitalize ${n.type === 'urgent' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
+                      }`}>
                       {n.type}
                     </span>
                     {!n.read && (

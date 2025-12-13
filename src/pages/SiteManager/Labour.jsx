@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '../../services/api';
+import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
 import { showToast } from '../../components/Toast';
 
 const Labour = () => {
@@ -9,43 +9,40 @@ const Labour = () => {
   const [formData, setFormData] = useState({ name: '', phone: '', dailyWage: '', designation: '', assignedSite: '' });
 
   useEffect(() => {
+    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = async () => {
-    try {
-      const [labRes, projRes] = await Promise.all([
-        api.get('/site/labours'),
-        api.get('/site/projects')
-      ]);
-      setLabours(labRes.data.data || []);
-      setProjects(projRes.data.data || []);
-      if (projRes.data.data.length > 0) {
-        setFormData(prev => ({ ...prev, assignedSite: projRes.data.data[0].id }));
-      }
-    } catch (error) {
-      showToast('Failed to load data', 'error');
+  const fetchData = () => {
+    const storedLabours = getCollection('labours', []);
+    const storedProjects = getCollection('projects', []);
+    setLabours(storedLabours);
+    setProjects(storedProjects);
+    if (storedProjects.length > 0) {
+      setFormData(prev => ({ ...prev, assignedSite: storedProjects[0].id }));
     }
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    try {
-      await api.post('/site/labours', formData);
-      showToast('Labour enrolled successfully', 'success');
-      setShowForm(false);
-      setFormData({ name: '', phone: '', dailyWage: '', designation: '', assignedSite: projects[0]?.id || '' });
-      fetchData();
-    } catch (error) {
-      showToast('Failed to enroll labour', 'error');
-    }
+    const labourData = {
+      id: generateId(),
+      ...formData,
+      pendingPayout: 0
+    };
+    const updated = [...getCollection('labours', []), labourData];
+    saveCollection('labours', updated);
+    showToast('Labour enrolled successfully', 'success');
+    setShowForm(false);
+    setFormData({ name: '', phone: '', dailyWage: '', designation: '', assignedSite: projects[0]?.id || '' });
+    setLabours(updated);
   };
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
       <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-6">Labour Management</h1>
-      <button 
-        onClick={() => setShowForm(!showForm)} 
+      <button
+        onClick={() => setShowForm(!showForm)}
         className="px-5 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
       >
         {showForm ? 'Cancel' : 'Enroll New Labour'}
@@ -56,54 +53,54 @@ const Labour = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Labour Name</label>
-              <input 
-                type="text" 
-                placeholder="Labour Name" 
-                value={formData.name} 
-                onChange={(e) => setFormData({...formData, name: e.target.value})} 
-                required 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <input
+                type="text"
+                placeholder="Labour Name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
-              <input 
-                type="tel" 
-                placeholder="Phone Number" 
-                value={formData.phone} 
-                onChange={(e) => setFormData({...formData, phone: e.target.value})} 
-                required 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <input
+                type="tel"
+                placeholder="Phone Number"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                required
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Daily Wage (₹)</label>
-              <input 
-                type="number" 
-                placeholder="Daily Wage" 
-                value={formData.dailyWage} 
-                onChange={(e) => setFormData({...formData, dailyWage: e.target.value})} 
-                required 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <input
+                type="number"
+                placeholder="Daily Wage"
+                value={formData.dailyWage}
+                onChange={(e) => setFormData({ ...formData, dailyWage: e.target.value })}
+                required
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Designation</label>
-              <input 
-                type="text" 
-                placeholder="e.g., Mason, Helper" 
-                value={formData.designation} 
-                onChange={(e) => setFormData({...formData, designation: e.target.value})} 
-                required 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <input
+                type="text"
+                placeholder="e.g., Mason, Helper"
+                value={formData.designation}
+                onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                required
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">Assigned Site</label>
-              <select 
-                value={formData.assignedSite} 
-                onChange={(e) => setFormData({...formData, assignedSite: e.target.value})} 
-                required 
+              <select
+                value={formData.assignedSite}
+                onChange={(e) => setFormData({ ...formData, assignedSite: e.target.value })}
+                required
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -118,7 +115,7 @@ const Labour = () => {
 
       <div className="mt-6 bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Labour List</h2>
-        
+
         {/* Mobile View */}
         <div className="block md:hidden space-y-3">
           {labours.map(l => (
