@@ -5,6 +5,9 @@ import { showToast } from '../../components/Toast';
 const Users = () => {
   const [users, setUsers] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [viewingUser, setViewingUser] = useState(null);
   const [formData, setFormData] = useState({ name: '', email: '', password: '', phone: '', salary: '', dateOfJoining: new Date().toISOString().split('T')[0] });
 
   const generateUserId = () => {
@@ -26,33 +29,75 @@ const Users = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const userData = {
-      id: generateId(),
-      ...formData,
-      role: 'sitemanager',
-      userId: generateUserId()
-    };
-    const updated = [...getCollection('users', []), userData];
-    saveCollection('users', updated);
-    showToast('Site manager created successfully', 'success');
+    if (editingUser) {
+      const updated = getCollection('users', []).map(u => 
+        u.id === editingUser.id ? { ...u, ...formData } : u
+      );
+      saveCollection('users', updated);
+      showToast('User updated successfully', 'success');
+      setEditingUser(null);
+    } else {
+      const userData = {
+        id: generateId(),
+        ...formData,
+        role: 'sitemanager',
+        userId: generateUserId(),
+        active: true
+      };
+      const updated = [...getCollection('users', []), userData];
+      saveCollection('users', updated);
+      showToast('Site manager created successfully', 'success');
+    }
     setShowForm(false);
+    setShowPassword(false);
     setFormData({ name: '', email: '', password: '', phone: '', salary: '', dateOfJoining: new Date().toISOString().split('T')[0] });
+    fetchUsers();
+  };
+
+  const handleEdit = (user) => {
+    setEditingUser(user);
+    setFormData({
+      name: user.name,
+      email: user.email,
+      password: user.password,
+      phone: user.phone || '',
+      salary: user.salary || '',
+      dateOfJoining: user.dateOfJoining || new Date().toISOString().split('T')[0]
+    });
+    setShowForm(true);
+    setShowPassword(false);
+  };
+
+  const handleDelete = (id) => {
+    if (!confirm('Are you sure you want to delete this user?')) return;
+    const updated = getCollection('users', []).filter(u => u.id !== id);
+    saveCollection('users', updated);
+    showToast('User deleted successfully', 'success');
     setUsers(updated);
   };
 
   const handleDeactivate = (id) => {
     if (!confirm('Deactivate this user?')) return;
-    const updated = getCollection('users', []).filter(u => u.id !== id);
+    const updated = getCollection('users', []).map(u => 
+      u.id === id ? { ...u, active: false } : u
+    );
     saveCollection('users', updated);
     showToast('User deactivated', 'success');
     setUsers(updated);
+  };
+
+  const handleCancelForm = () => {
+    setShowForm(false);
+    setEditingUser(null);
+    setShowPassword(false);
+    setFormData({ name: '', email: '', password: '', phone: '', salary: '', dateOfJoining: new Date().toISOString().split('T')[0] });
   };
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
       <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-6">User Management</h1>
       <button
-        onClick={() => setShowForm(!showForm)}
+        onClick={() => showForm ? handleCancelForm() : setShowForm(true)}
         className="px-5 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
       >
         {showForm ? 'Cancel' : 'Add Site Manager'}
@@ -85,15 +130,33 @@ const Users = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-              <input
-                type="password"
-                placeholder="Password (min 6 chars)"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                required
-                minLength="6"
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Password (min 6 chars)"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  required
+                  minLength="6"
+                  className="w-full px-4 py-2.5 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                >
+                  {showPassword ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
@@ -126,7 +189,7 @@ const Users = () => {
             </div>
           </div>
           <button type="submit" className="mt-5 px-6 py-2.5 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium">
-            Create User
+            {editingUser ? 'Update User' : 'Create User'}
           </button>
         </form>
       )}
@@ -152,14 +215,26 @@ const Users = () => {
                   </span>
                 </div>
               </div>
-              {u.active && (
+              <div className="mt-3 flex gap-2">
                 <button
-                  onClick={() => handleDeactivate(u.id)}
-                  className="mt-3 w-full px-3 py-2 bg-red-500 text-white rounded text-sm font-medium hover:bg-red-600"
+                  onClick={() => setViewingUser(u)}
+                  className="flex-1 px-3 py-2 bg-blue-500 text-white rounded text-sm font-medium hover:bg-blue-600"
                 >
-                  Deactivate
+                  👁️ View
                 </button>
-              )}
+                <button
+                  onClick={() => handleEdit(u)}
+                  className="flex-1 px-3 py-2 bg-yellow-500 text-white rounded text-sm font-medium hover:bg-yellow-600"
+                >
+                  ✏️ Edit
+                </button>
+                <button
+                  onClick={() => handleDelete(u.id)}
+                  className="flex-1 px-3 py-2 bg-red-500 text-white rounded text-sm font-medium hover:bg-red-600"
+                >
+                  🗑️ Delete
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -195,14 +270,29 @@ const Users = () => {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    {u.active && (
+                    <div className="flex gap-2">
                       <button
-                        onClick={() => handleDeactivate(u.id)}
-                        className="px-3 py-1.5 bg-red-500 text-white rounded text-sm hover:bg-red-600"
+                        onClick={() => setViewingUser(u)}
+                        className="px-3 py-1.5 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+                        title="View Details"
                       >
-                        Deactivate
+                        👁️
                       </button>
-                    )}
+                      <button
+                        onClick={() => handleEdit(u)}
+                        className="px-3 py-1.5 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600"
+                        title="Edit User"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        onClick={() => handleDelete(u.id)}
+                        className="px-3 py-1.5 bg-red-500 text-white rounded text-sm hover:bg-red-600"
+                        title="Delete User"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -210,6 +300,50 @@ const Users = () => {
           </table>
         </div>
       </div>
+
+      {/* View User Modal */}
+      {viewingUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-xl font-bold mb-4">User Details</h3>
+            <div className="space-y-3">
+              <div>
+                <span className="font-semibold">User ID:</span> <span className="font-mono text-sm">{viewingUser.userId}</span>
+              </div>
+              <div>
+                <span className="font-semibold">Name:</span> {viewingUser.name}
+              </div>
+              <div>
+                <span className="font-semibold">Email:</span> {viewingUser.email}
+              </div>
+              <div>
+                <span className="font-semibold">Phone:</span> {viewingUser.phone || 'N/A'}
+              </div>
+              <div>
+                <span className="font-semibold">Password:</span> {viewingUser.password}
+              </div>
+              <div>
+                <span className="font-semibold">Monthly Salary:</span> <span className="text-green-600 font-bold">₹{viewingUser.salary?.toLocaleString()}</span>
+              </div>
+              <div>
+                <span className="font-semibold">Date of Joining:</span> {viewingUser.dateOfJoining ? new Date(viewingUser.dateOfJoining).toLocaleDateString() : 'N/A'}
+              </div>
+              <div>
+                <span className="font-semibold">Status:</span> 
+                <span className={`ml-2 px-3 py-1 rounded-full text-xs font-semibold ${viewingUser.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  {viewingUser.active ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => setViewingUser(null)}
+              className="mt-6 w-full px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
