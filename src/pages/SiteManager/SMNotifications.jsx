@@ -1,26 +1,34 @@
 import { useState, useEffect } from 'react';
-import { ensureSeedData, getCollection, saveCollection } from '../../services/storage';
+import api from '../../services/api';
 import { showToast } from '../../components/Toast';
 
 const SMNotifications = () => {
   const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
-    ensureSeedData();
     fetchNotifications();
   }, []);
 
-  const fetchNotifications = () => {
-    const all = getCollection('notifications', []);
-    const siteNotes = all.filter(n => n.recipientRole === 'sitemanager');
-    setNotifications(siteNotes);
+  const fetchNotifications = async () => {
+    try {
+      const response = await api.get('/site/notifications');
+      if (response.data.success) {
+        setNotifications(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    }
   };
 
-  const markAsRead = (id) => {
-    const all = getCollection('notifications', []);
-    const updatedAll = all.map(n => n.id === id ? { ...n, read: true } : n);
-    saveCollection('notifications', updatedAll);
-    setNotifications(updatedAll.filter(n => n.recipientRole === 'sitemanager'));
+  const markAsRead = async (id) => {
+    try {
+      const response = await api.put(`/site/notifications/${id}/read`);
+      if (response.data.success) {
+        fetchNotifications();
+      }
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
   };
 
   return (

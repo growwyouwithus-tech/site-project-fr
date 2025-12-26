@@ -5,8 +5,11 @@
 
 import { io } from 'socket.io-client';
 
+// Get socket URL from environment variable or use localhost for development
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+
 // Initialize socket connection
-const socket = io('http://localhost:5000', {
+const socket = io(SOCKET_URL, {
   withCredentials: true,
   autoConnect: false // Don't connect automatically
 });

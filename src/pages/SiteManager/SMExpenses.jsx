@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
+import api from '../../services/api';
 import { showToast } from '../../components/Toast';
 
 const SMExpenses = () => {
@@ -9,32 +9,50 @@ const SMExpenses = () => {
   const [formData, setFormData] = useState({ projectId: '', name: '', amount: '', voucherNumber: '', remarks: '', receipt: '' });
 
   useEffect(() => {
-    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = () => {
-    const proj = getCollection('projects', []);
-    const exp = getCollection('expenses', []);
-    setProjects(proj);
-    setExpenses(exp);
-    if (proj.length > 0) setFormData(prev => ({ ...prev, projectId: proj[0].id }));
+  const fetchData = async () => {
+    try {
+      const [projectsRes, expensesRes] = await Promise.all([
+        api.get('/site/projects'),
+        api.get('/site/expenses')
+      ]);
+
+      if (projectsRes.data.success) {
+        setProjects(projectsRes.data.data);
+        if (projectsRes.data.data.length > 0) {
+          setFormData(prev => ({ ...prev, projectId: projectsRes.data.data[0]._id }));
+        }
+      }
+
+      if (expensesRes.data.success) {
+        setExpenses(expensesRes.data.data);
+      }
+    } catch (error) {
+      showToast('Failed to fetch data', 'error');
+      console.error('Error fetching data:', error);
+    }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const record = {
-      id: generateId(),
-      ...formData,
-      amount: Number(formData.amount) || 0,
-      createdAt: new Date().toISOString()
-    };
-    const updated = [...getCollection('expenses', []), record];
-    saveCollection('expenses', updated);
-    showToast('Expense added successfully', 'success');
-    setShowForm(false);
-    setFormData({ projectId: projects[0]?.id || '', name: '', amount: '', voucherNumber: '', remarks: '', receipt: '' });
-    setExpenses(updated);
+    try {
+      const response = await api.post('/site/expenses', {
+        ...formData,
+        amount: Number(formData.amount) || 0
+      });
+
+      if (response.data.success) {
+        showToast('Expense added successfully', 'success');
+        setShowForm(false);
+        setFormData({ projectId: projects[0]?._id || '', name: '', amount: '', voucherNumber: '', remarks: '', receipt: '' });
+        fetchData();
+      }
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to add expense', 'error');
+      console.error('Error adding expense:', error);
+    }
   };
 
   const handleReceipt = (file) => {

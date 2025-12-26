@@ -1,40 +1,51 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ensureSeedData, getCollection } from '../../services/storage';
+import api from '../../services/api';
+import { showToast } from '../../components/Toast';
 
 const ProjectDetail = () => {
   const { id } = useParams();
   const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    ensureSeedData();
     fetchProject();
   }, [id]);
 
   const fetchProject = async () => {
-    const projects = getCollection('projects', []);
-    const expenses = getCollection('expenses', []);
-    const stocks = getCollection('stocks', []);
-    const machines = getCollection('machines', []);
+    try {
+      setLoading(true);
+      const response = await api.get(`/admin/projects/${id}`);
 
-    const project = projects.find(p => p.id === id);
-    if (!project) {
+      if (!response.data.success) {
+        setData(null);
+        setLoading(false);
+        return;
+      }
+
+      const projectData = response.data.data;
+
+      setData({
+        project: projectData.project,
+        expenses: projectData.expenses || [],
+        stocks: [],
+        machines: [],
+        labours: projectData.labours || []
+      });
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching project:', error);
+      showToast('Failed to load project details', 'error');
       setData(null);
-      return;
+      setLoading(false);
     }
-
-    const projectExpenses = expenses.filter(e => e.projectId === id);
-    const projectStocks = stocks.filter(s => s.projectId === id);
-    const projectMachines = machines.filter(m => m.projectId === id);
-
-    setData({
-      project,
-      expenses: projectExpenses,
-      stocks: projectStocks,
-      machines: projectMachines,
-      labours: [] // placeholder since labours are not stored in session demo
-    });
   };
+
+  if (loading) return (
+    <div className="p-8 text-center text-gray-500">
+      <p>Loading project details...</p>
+    </div>
+  );
 
   if (!data) return (
     <div className="p-8 text-center text-gray-500">

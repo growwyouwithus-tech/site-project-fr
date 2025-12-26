@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { showToast } from '../../components/Toast';
-import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
+import api from '../../services/api';
 
 const Projects = () => {
   const [projects, setProjects] = useState([]);
@@ -9,40 +9,53 @@ const Projects = () => {
   const [formData, setFormData] = useState({ name: '', location: '', budget: '', startDate: '', endDate: '' });
 
   useEffect(() => {
-    ensureSeedData();
     fetchProjects();
   }, []);
 
   const fetchProjects = async () => {
-    const stored = getCollection('projects', []);
-    setProjects(stored);
+    try {
+      const response = await api.get('/admin/projects');
+      if (response.data.success) {
+        setProjects(response.data.data);
+      }
+    } catch (error) {
+      showToast('Failed to fetch projects', 'error');
+      console.error('Error fetching projects:', error);
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const newProject = {
-      ...formData,
-      id: generateId(),
-      budget: Number(formData.budget) || 0,
-      status: 'Active'
-    };
-    const updated = [...getCollection('projects', []), newProject];
-    saveCollection('projects', updated);
-    showToast('Project created successfully', 'success');
-    setShowForm(false);
-    setFormData({ name: '', location: '', budget: '', startDate: '', endDate: '' });
-    setProjects(updated);
+    try {
+      const response = await api.post('/admin/projects', {
+        ...formData,
+        budget: Number(formData.budget) || 0,
+        status: 'running'
+      });
+      if (response.data.success) {
+        showToast('Project created successfully', 'success');
+        setShowForm(false);
+        setFormData({ name: '', location: '', budget: '', startDate: '', endDate: '' });
+        fetchProjects();
+      }
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to create project', 'error');
+      console.error('Error creating project:', error);
+    }
   };
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this project? This will remove all associated data.')) return;
-    const updated = getCollection('projects', []).filter(p => p.id !== id);
-    saveCollection('projects', updated);
-    // Also delete related expenses
-    const updatedExpenses = getCollection('expenses', []).filter(e => e.projectId !== id);
-    saveCollection('expenses', updatedExpenses);
-    showToast('Project deleted', 'success');
-    setProjects(updated);
+    try {
+      const response = await api.delete(`/admin/projects/${id}`);
+      if (response.data.success) {
+        showToast('Project deleted', 'success');
+        fetchProjects();
+      }
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to delete project', 'error');
+      console.error('Error deleting project:', error);
+    }
   };
 
   return (
@@ -120,7 +133,7 @@ const Projects = () => {
 
       <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {projects.map(p => (
-          <div key={p.id} className="bg-white p-5 rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+          <div key={p._id} className="bg-white p-5 rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
             <div className="flex justify-between items-start mb-4">
               <h3 className="text-lg font-bold text-gray-900 flex-1">{p.name}</h3>
               <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold ml-2">
@@ -144,16 +157,18 @@ const Projects = () => {
             </div>
             <div className="flex gap-2">
               <Link
-                to={`/admin/projects/${p.id}`}
-                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-center text-sm font-medium"
+                to={`/admin/projects/${p._id}`}
+                className="flex-1 px-3 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors text-center text-sm font-medium"
+                title="View Details"
               >
-                View Details
+                👁️
               </Link>
               <button
-                onClick={() => handleDelete(p.id)}
-                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-medium"
+                onClick={() => handleDelete(p._id)}
+                className="flex-1 px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-medium"
+                title="Delete"
               >
-                Delete
+                🗑️
               </button>
             </div>
           </div>

@@ -1,80 +1,139 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { showToast } from '../../components/Toast';
-import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
+import api from '../../services/api';
 
 const MachineCategory = () => {
   const { category } = useParams();
   const navigate = useNavigate();
   const [machines, setMachines] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [contractors, setContractors] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedMachine, setSelectedMachine] = useState(null);
   const [assignProjectId, setAssignProjectId] = useState('');
+  const [assignAsRental, setAssignAsRental] = useState(false);
+  const [rentalPerDay, setRentalPerDay] = useState(0);
   const [formData, setFormData] = useState({
     name: '',
     model: '',
     plateNumber: '',
     quantity: 1,
-    status: 'available'
+    status: 'available',
+    ownershipType: 'own',
+    vendorName: '',
+    machineCategory: '',
+    machinePhoto: '',
+    perDayExpense: 0
   });
 
   useEffect(() => {
-    ensureSeedData();
     fetchMachines();
     fetchProjects();
+    fetchContractors();
   }, [category]);
 
   const fetchMachines = async () => {
-    const all = getCollection('machines', []);
-    const filtered = all.filter(m => m.category === category);
-    setMachines(filtered);
+    try {
+      const response = await api.get('/admin/machines');
+      if (response.data.success) {
+        const filtered = response.data.data.filter(m => m.category === category);
+        setMachines(filtered);
+      }
+    } catch (error) {
+      showToast('Failed to fetch machines', 'error');
+      console.error('Error fetching machines:', error);
+    }
   };
 
   const fetchProjects = async () => {
-    const stored = getCollection('projects', []);
-    setProjects(stored);
+    try {
+      const response = await api.get('/admin/projects');
+      if (response.data.success) {
+        setProjects(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+    }
+  };
+
+  const fetchContractors = async () => {
+    try {
+      const response = await api.get('/admin/contractors');
+      if (response.data.success) {
+        setContractors(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching contractors:', error);
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const newMachine = {
-      ...formData,
-      id: generateId(),
-      category,
-      quantity: isConsumable ? formData.quantity : Number(formData.quantity) || 1
-    };
-    const all = getCollection('machines', []);
-    const updated = [...all, newMachine];
-    saveCollection('machines', updated);
-    showToast('Machine added successfully', 'success');
-    setShowForm(false);
-    setFormData({ name: '', model: '', plateNumber: '', quantity: 1, status: 'available' });
-    fetchMachines();
+    try {
+      const newMachine = {
+        ...formData,
+        category,
+        quantity: isConsumable ? formData.quantity : Number(formData.quantity) || 1
+      };
+      const response = await api.post('/admin/machines', newMachine);
+      if (response.data.success) {
+        showToast('Machine added successfully', 'success');
+        setShowForm(false);
+        setFormData({ name: '', model: '', plateNumber: '', quantity: 1, status: 'available', ownershipType: 'own', vendorName: '', machineCategory: '', machinePhoto: '', perDayExpense: 0 });
+        fetchMachines();
+      }
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to add machine', 'error');
+      console.error('Error adding machine:', error);
+    }
   };
 
   const handleAssignMachine = async () => {
     if (!assignProjectId) {
-      showToast('Please select a project', 'error');
+      showToast('Please select a project or contractor', 'error');
       return;
     }
-    const all = getCollection('machines', []);
-    const updated = all.map(m => m.id === selectedMachine.id ? { ...m, projectId: assignProjectId, status: 'in-use' } : m);
-    saveCollection('machines', updated);
-    showToast('Machine assigned to project', 'success');
-    setShowAssignModal(false);
-    setSelectedMachine(null);
-    setAssignProjectId('');
-    fetchMachines();
+    if (assignAsRental && (!rentalPerDay || rentalPerDay <= 0)) {
+      showToast('Please enter valid rental per day amount', 'error');
+      return;
+    }
+    try {
+      const updateData = {
+        projectId: assignProjectId,
+        status: 'in-use',
+        assignedAsRental: assignAsRental,
+        assignedRentalPerDay: assignAsRental ? Number(rentalPerDay) : 0
+      };
+      const response = await api.put(`/admin/machines/${selectedMachine._id}`, updateData);
+      if (response.data.success) {
+        showToast('Machine assigned successfully', 'success');
+        setShowAssignModal(false);
+        setSelectedMachine(null);
+        setAssignProjectId('');
+        setAssignAsRental(false);
+        setRentalPerDay(0);
+        fetchMachines();
+      }
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to assign machine', 'error');
+      console.error('Error assigning machine:', error);
+    }
   };
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this machine?')) return;
-    const updated = getCollection('machines', []).filter(m => m.id !== id);
-    saveCollection('machines', updated);
-    showToast('Machine deleted', 'success');
-    fetchMachines();
+    try {
+      const response = await api.delete(`/admin/machines/${id}`);
+      if (response.data.success) {
+        showToast('Machine deleted', 'success');
+        fetchMachines();
+      }
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to delete machine', 'error');
+      console.error('Error deleting machine:', error);
+    }
   };
 
   const categoryNames = {
@@ -129,6 +188,20 @@ const MachineCategory = () => {
               />
             </div>
 
+            {!isConsumable && !isLabEquipment && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Ownership Type</label>
+                <select
+                  value={formData.ownershipType}
+                  onChange={(e) => setFormData({ ...formData, ownershipType: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="own">Own</option>
+                  <option value="rented">Rented</option>
+                </select>
+              </div>
+            )}
+
             {!isConsumable && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Model/Brand</label>
@@ -150,6 +223,59 @@ const MachineCategory = () => {
                   placeholder="e.g., DL-01-AB-1234"
                   value={formData.plateNumber}
                   onChange={(e) => setFormData({ ...formData, plateNumber: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
+
+            {!isConsumable && !isLabEquipment && formData.ownershipType === 'rented' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Vendor Name</label>
+                  <input
+                    type="text"
+                    placeholder="Enter vendor name"
+                    value={formData.vendorName}
+                    onChange={(e) => setFormData({ ...formData, vendorName: e.target.value })}
+                    required
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Per Day Expense (₹)</label>
+                  <input
+                    type="number"
+                    placeholder="Enter daily rental cost"
+                    value={formData.perDayExpense}
+                    onChange={(e) => setFormData({ ...formData, perDayExpense: e.target.value })}
+                    required
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </>
+            )}
+
+            {!isConsumable && !isLabEquipment && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Machine Category</label>
+                <input
+                  type="text"
+                  placeholder="e.g., Excavator, Crane, Mixer"
+                  value={formData.machineCategory}
+                  onChange={(e) => setFormData({ ...formData, machineCategory: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
+
+            {!isConsumable && !isLabEquipment && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Machine Photo URL</label>
+                <input
+                  type="text"
+                  placeholder="Enter photo URL"
+                  value={formData.machinePhoto}
+                  onChange={(e) => setFormData({ ...formData, machinePhoto: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -196,7 +322,7 @@ const MachineCategory = () => {
         {/* Mobile View */}
         <div className="block md:hidden space-y-3">
           {machines.map(m => (
-            <div key={m.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div key={m._id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
               <div className="font-bold text-gray-900 mb-2">{m.name}</div>
               <div className="text-sm space-y-1">
                 <div><span className="font-medium">Model:</span> {m.model || 'N/A'}</div>
@@ -204,8 +330,8 @@ const MachineCategory = () => {
                 <div><span className="font-medium">Quantity:</span> {m.quantity}</div>
                 <div>
                   <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold capitalize ${m.status === 'available' ? 'bg-green-100 text-green-800' :
-                      m.status === 'in-use' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
+                    m.status === 'in-use' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
                     }`}>
                     {m.status}
                   </span>
@@ -246,15 +372,15 @@ const MachineCategory = () => {
             </thead>
             <tbody>
               {machines.map(m => (
-                <tr key={m.id} className="border-b border-gray-200 hover:bg-gray-50">
+                <tr key={m._id} className="border-b border-gray-200 hover:bg-gray-50">
                   <td className="px-4 py-3">{m.name}</td>
                   <td className="px-4 py-3">{m.model || 'N/A'}</td>
                   {!isLabEquipment && <td className="px-4 py-3">{m.plateNumber || 'N/A'}</td>}
                   <td className="px-4 py-3">{m.quantity}</td>
                   <td className="px-4 py-3">
                     <span className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${m.status === 'available' ? 'bg-green-100 text-green-800' :
-                        m.status === 'in-use' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-red-100 text-red-800'
+                      m.status === 'in-use' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
                       }`}>
                       {m.status}
                     </span>
@@ -270,7 +396,7 @@ const MachineCategory = () => {
                         </button>
                       )}
                       <button
-                        onClick={() => handleDelete(m.id)}
+                        onClick={() => handleDelete(m._id)}
                         className="px-3 py-1.5 bg-red-500 text-white rounded text-sm hover:bg-red-600"
                       >
                         Delete
@@ -290,16 +416,52 @@ const MachineCategory = () => {
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
             <h3 className="text-xl font-bold text-gray-900 mb-4">Assign Machine to Project</h3>
             <p className="text-gray-600 mb-4">Machine: <strong>{selectedMachine?.name}</strong></p>
-            <select
-              value={assignProjectId}
-              onChange={(e) => setAssignProjectId(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Select Project</option>
-              {projects.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Select Project or Contractor</label>
+              <select
+                value={assignProjectId}
+                onChange={(e) => setAssignProjectId(e.target.value)}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Select Project or Contractor</option>
+                <optgroup label="Projects">
+                  {projects.map(p => (
+                    <option key={p._id} value={p._id}>{p.name}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Contractors">
+                  {contractors.map(c => (
+                    <option key={c._id} value={c._id}>{c.name} (Contractor)</option>
+                  ))}
+                </optgroup>
+              </select>
+            </div>
+
+            <div className="mb-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={assignAsRental}
+                  onChange={(e) => setAssignAsRental(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-gray-700">Assign as Rental</span>
+              </label>
+            </div>
+
+            {assignAsRental && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Rental Per Day (₹)</label>
+                <input
+                  type="number"
+                  placeholder="Enter rental cost per day"
+                  value={rentalPerDay}
+                  onChange={(e) => setRentalPerDay(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
+
             <div className="flex gap-3">
               <button
                 onClick={handleAssignMachine}
@@ -308,7 +470,7 @@ const MachineCategory = () => {
                 Assign
               </button>
               <button
-                onClick={() => { setShowAssignModal(false); setSelectedMachine(null); setAssignProjectId(''); }}
+                onClick={() => { setShowAssignModal(false); setSelectedMachine(null); setAssignProjectId(''); setAssignAsRental(false); setRentalPerDay(0); }}
                 className="flex-1 px-4 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
               >
                 Cancel

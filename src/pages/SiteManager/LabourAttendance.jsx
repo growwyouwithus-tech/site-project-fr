@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
+import api from '../../services/api';
 import { showToast } from '../../components/Toast';
 
 const LabourAttendance = () => {
@@ -9,40 +9,57 @@ const LabourAttendance = () => {
   const [statusMap, setStatusMap] = useState({});
 
   useEffect(() => {
-    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = () => {
-    const labs = getCollection('labours', []);
-    const proj = getCollection('projects', []);
-    const att = getCollection('labourAttendances', []);
-    setLabours(labs);
-    setProjects(proj);
-    setAttendance(att);
+  const fetchData = async () => {
+    try {
+      const [laboursRes, projectsRes, attendanceRes] = await Promise.all([
+        api.get('/site/labours'),
+        api.get('/site/projects'),
+        api.get('/site/labour-attendance')
+      ]);
 
-    const defaults = {};
-    labs.forEach(l => { defaults[l.id] = 'present'; });
-    setStatusMap(defaults);
+      if (laboursRes.data.success) {
+        const labs = laboursRes.data.data;
+        setLabours(labs);
+        const defaults = {};
+        labs.forEach(l => { defaults[l._id] = 'present'; });
+        setStatusMap(defaults);
+      }
+
+      if (projectsRes.data.success) {
+        setProjects(projectsRes.data.data);
+      }
+
+      if (attendanceRes.data.success) {
+        setAttendance(attendanceRes.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    }
   };
 
-  const handleSave = (labour) => {
-    const status = statusMap[labour.id] || 'present';
-    const payload = {
-      id: generateId(),
-      labourId: labour.id,
-      labourName: labour.name,
-      projectId: labour.assignedSite || projects[0]?.id || '',
-      date: new Date().toISOString().split('T')[0],
-      remarks: '',
-      status,
-      time: new Date().toISOString()
-    };
+  const handleSave = async (labour) => {
+    const status = statusMap[labour._id] || 'present';
+    try {
+      const response = await api.post('/site/labour-attendance', {
+        labourId: labour._id,
+        labourName: labour.name,
+        projectId: labour.assignedSite?._id || projects[0]?._id || '',
+        date: new Date().toISOString().split('T')[0],
+        status,
+        remarks: ''
+      });
 
-    const updated = [...getCollection('labourAttendances', []), payload];
-    saveCollection('labourAttendances', updated);
-    showToast(`${labour.name} marked ${status}`, 'success');
-    setAttendance(updated);
+      if (response.data.success) {
+        showToast(`${labour.name} marked ${status}`, 'success');
+        fetchData();
+      }
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to mark attendance', 'error');
+      console.error('Error marking attendance:', error);
+    }
   };
 
   const handleEditLoad = (record) => {

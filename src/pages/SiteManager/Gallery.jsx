@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
+import api from '../../services/api';
 import { showToast } from '../../components/Toast';
 import Camera from '../../components/Camera';
 
@@ -11,16 +11,29 @@ const Gallery = () => {
   const [capturedImages, setCapturedImages] = useState([]);
 
   useEffect(() => {
-    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = () => {
-    const proj = getCollection('projects', []);
-    const gal = getCollection('gallery', []);
-    setProjects(proj);
-    setGallery(gal);
-    if (proj.length > 0) setSelectedProject(proj[0].id);
+  const fetchData = async () => {
+    try {
+      const [projectsRes, galleryRes] = await Promise.all([
+        api.get('/site/projects'),
+        api.get('/site/gallery')
+      ]);
+
+      if (projectsRes.data.success) {
+        setProjects(projectsRes.data.data);
+        if (projectsRes.data.data.length > 0) {
+          setSelectedProject(projectsRes.data.data[0]._id);
+        }
+      }
+
+      if (galleryRes.data.success) {
+        setGallery(galleryRes.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    }
   };
 
   const handlePhotoCapture = (photoData) => {
@@ -28,22 +41,26 @@ const Gallery = () => {
     setShowCamera(false);
   };
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
     if (capturedImages.length === 0) {
       showToast('Please capture at least one photo', 'error');
       return;
     }
-    const record = {
-      id: generateId(),
-      projectId: selectedProject,
-      images: capturedImages,
-      createdAt: new Date().toISOString()
-    };
-    const updated = [...getCollection('gallery', []), record];
-    saveCollection('gallery', updated);
-    showToast('Images uploaded successfully', 'success');
-    setCapturedImages([]);
-    setGallery(updated);
+    try {
+      const response = await api.post('/site/gallery', {
+        projectId: selectedProject,
+        images: capturedImages
+      });
+
+      if (response.data.success) {
+        showToast('Images uploaded successfully', 'success');
+        setCapturedImages([]);
+        fetchData();
+      }
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to upload images', 'error');
+      console.error('Error uploading images:', error);
+    }
   };
 
   return (

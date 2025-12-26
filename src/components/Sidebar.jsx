@@ -18,6 +18,7 @@ const Sidebar = () => {
     { path: '/admin/stock', label: 'Stock', icon: '📦' },
     { path: '/admin/projects', label: 'Projects', icon: '🏗️' },
     { path: '/admin/vendors', label: 'Vendors', icon: '🏪' },
+    { path: '/admin/contractors', label: 'Contractors', icon: '👷' },
     { path: '/admin/expenses', label: 'Expenses', icon: '💰' },
     { path: '/admin/transfer', label: 'Transfer', icon: '🔄' },
     { path: '/admin/accounts', label: 'Accounts', icon: '💳' },
@@ -72,13 +73,12 @@ const Sidebar = () => {
         fixed top-0 left-0 h-screen bg-dark z-[1000]
         transition-all duration-300 ease-in-out overflow-y-auto scrollbar-custom
         md:w-60 md:translate-x-0
-        ${ isOpen ? 'w-64 translate-x-0' : 'w-0 -translate-x-full md:w-16'}
+        ${isOpen ? 'w-64 translate-x-0' : 'w-0 -translate-x-full md:w-16'}
       `}>
         {/* Logo Section */}
         <div className="py-8 px-5 border-b border-border-light">
-          <h2 className={`text-primary font-bold tracking-widest uppercase ${
-            isOpen || window.innerWidth >= 768 ? 'text-lg' : 'text-xs text-center'
-          }`}>
+          <h2 className={`text-primary font-bold tracking-widest uppercase ${isOpen || window.innerWidth >= 768 ? 'text-lg' : 'text-xs text-center'
+            }`}>
             {isOpen || window.innerWidth >= 768 ? (user?.role === 'admin' ? 'ADMIN' : 'MANAGER') : (user?.role === 'admin' ? 'AD' : 'MG')}
           </h2>
         </div>
@@ -126,7 +126,7 @@ const Sidebar = () => {
         </div>
       </div>
     </>
-  
+
   );
 };
 

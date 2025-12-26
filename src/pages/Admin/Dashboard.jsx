@@ -5,40 +5,29 @@
 
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ensureSeedData, getCollection } from '../../services/storage';
+import api from '../../services/api';
+import { showToast } from '../../components/Toast';
 
 const Dashboard = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    ensureSeedData();
     fetchDashboard();
   }, []);
 
-  const fetchDashboard = () => {
-    const projects = getCollection('projects', []);
-    const expenses = getCollection('expenses', []);
-    const users = getCollection('users', []);
-    const labours = getCollection('labours', []);
-
-    const totalProjects = projects.length;
-    const runningProjects = projects.filter(p => (p.status || '').toLowerCase() === 'running' || (p.status || '').toLowerCase() === 'active').length;
-    const completedProjects = projects.filter(p => (p.status || '').toLowerCase() === 'completed').length;
-    const totalSiteManagers = users.filter(u => u.role === 'sitemanager').length;
-    const totalLabours = labours.length;
-    const totalExpenses = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-
-    setData({
-      totalProjects,
-      runningProjects,
-      completedProjects,
-      totalSiteManagers,
-      totalLabours,
-      totalExpenses,
-      projects
-    });
-    setLoading(false);
+  const fetchDashboard = async () => {
+    try {
+      const response = await api.get('/admin/dashboard');
+      if (response.data.success) {
+        setData(response.data.data);
+      }
+    } catch (error) {
+      showToast('Failed to fetch dashboard data', 'error');
+      console.error('Error fetching dashboard:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) {

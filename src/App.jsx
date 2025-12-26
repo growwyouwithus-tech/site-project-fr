@@ -22,6 +22,7 @@ import Stock from './pages/Admin/Stock';
 import Projects from './pages/Admin/Projects';
 import ProjectDetail from './pages/Admin/ProjectDetail';
 import Vendors from './pages/Admin/Vendors';
+import Contractors from './pages/Admin/Contractors';
 import Expenses from './pages/Admin/Expenses';
 import Transfer from './pages/Admin/Transfer';
 import Accounts from './pages/Admin/Accounts';
@@ -70,16 +71,16 @@ const Layout = ({ children }) => {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
         const oscillator = audioContext.createOscillator();
         const gainNode = audioContext.createGain();
-        
+
         oscillator.connect(gainNode);
         gainNode.connect(audioContext.destination);
-        
+
         oscillator.frequency.value = 800;
         oscillator.type = 'sine';
-        
+
         gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-        
+
         oscillator.start(audioContext.currentTime);
         oscillator.stop(audioContext.currentTime + 0.5);
       };
@@ -127,6 +128,7 @@ const AppRoutes = () => {
             <Route path="/admin/projects" element={<Projects />} />
             <Route path="/admin/projects/:id" element={<ProjectDetail />} />
             <Route path="/admin/vendors" element={<Vendors />} />
+            <Route path="/admin/contractors" element={<Contractors />} />
             <Route path="/admin/expenses" element={<Expenses />} />
             <Route path="/admin/transfer" element={<Transfer />} />
             <Route path="/admin/accounts" element={<Accounts />} />

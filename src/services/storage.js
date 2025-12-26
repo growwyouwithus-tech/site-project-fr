@@ -112,6 +112,8 @@ export const ensureSeedData = () => {
     if (!Array.isArray(data.payments)) data.payments = [];
     if (!Array.isArray(data.gallery)) data.gallery = [];
     if (!Array.isArray(data.dailyReports)) data.dailyReports = [];
+    if (!Array.isArray(data.contractors)) data.contractors = [];
+    if (!Array.isArray(data.contractorPayments)) data.contractorPayments = [];
     if (!data.accounts) {
         data.accounts = { capital: 1000000 };
     }

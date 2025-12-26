@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { showToast } from '../../components/Toast';
-import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
+import api from '../../services/api';
 
 const Stock = () => {
   const [stocks, setStocks] = useState([]);
@@ -20,58 +20,73 @@ const Stock = () => {
   const units = ['kg', 'ltr', 'bags', 'ft', 'meter', 'ton', 'piece', 'box', 'bundle'];
 
   useEffect(() => {
-    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = () => {
-    const storedStocks = getCollection('stocks', []);
-    const storedProjects = getCollection('projects', []);
-    setStocks(storedStocks);
-    setProjects(storedProjects);
-    if (storedProjects.length > 0) {
-      setFormData(prev => ({ ...prev, projectId: storedProjects[0].id }));
+  const fetchData = async () => {
+    try {
+      const [stocksRes, projectsRes] = await Promise.all([
+        api.get('/admin/stocks'),
+        api.get('/admin/projects')
+      ]);
+
+      if (stocksRes.data.success) {
+        setStocks(stocksRes.data.data);
+      }
+
+      if (projectsRes.data.success) {
+        setProjects(projectsRes.data.data);
+        if (projectsRes.data.data.length > 0) {
+          setFormData(prev => ({ ...prev, projectId: projectsRes.data.data[0]._id }));
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const quantityNum = Number(formData.quantity) || 0;
-    const unitPriceNum = Number(formData.unitPrice) || 0;
-    const totalPrice = quantityNum * unitPriceNum;
+    try {
+      const response = await api.post('/admin/stocks', {
+        ...formData,
+        quantity: Number(formData.quantity) || 0,
+        unitPrice: Number(formData.unitPrice) || 0
+      });
 
-    const newStock = {
-      ...formData,
-      id: generateId(),
-      quantity: quantityNum,
-      unitPrice: unitPriceNum,
-      totalPrice,
-      createdAt: new Date().toISOString()
-    };
-
-    const updated = [...getCollection('stocks', []), newStock];
-    saveCollection('stocks', updated);
-    showToast('Stock added successfully', 'success');
-    setShowForm(false);
-    setFormData({
-      projectId: projects[0]?.id || '',
-      vendorName: '',
-      materialName: '',
-      unit: 'kg',
-      quantity: '',
-      unitPrice: '',
-      photo: '',
-      remarks: ''
-    });
-    setStocks(updated);
+      if (response.data.success) {
+        showToast('Stock added successfully', 'success');
+        setShowForm(false);
+        setFormData({
+          projectId: projects[0]?._id || '',
+          vendorName: '',
+          materialName: '',
+          unit: 'kg',
+          quantity: '',
+          unitPrice: '',
+          photo: '',
+          remarks: ''
+        });
+        fetchData();
+      }
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to add stock', 'error');
+      console.error('Error adding stock:', error);
+    }
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (!confirm('Delete this stock entry?')) return;
-    const updated = getCollection('stocks', []).filter(s => s.id !== id);
-    saveCollection('stocks', updated);
-    showToast('Stock deleted', 'success');
-    setStocks(updated);
+    try {
+      const response = await api.delete(`/admin/stocks/${id}`);
+      if (response.data.success) {
+        showToast('Stock deleted', 'success');
+        fetchData();
+      }
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to delete stock', 'error');
+      console.error('Error deleting stock:', error);
+    }
   };
 
   const handlePhoto = (file) => {

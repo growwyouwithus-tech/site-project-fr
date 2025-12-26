@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
+import api from '../../services/api';
 import { showToast } from '../../components/Toast';
 
 const Notifications = () => {
@@ -9,34 +9,45 @@ const Notifications = () => {
   const [formData, setFormData] = useState({ recipientId: '', message: '', type: 'general' });
 
   useEffect(() => {
-    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = () => {
-    const notif = getCollection('notifications', []);
-    const siteManagers = getCollection('users', []).filter(u => u.role === 'sitemanager');
-    setNotifications(notif);
-    setUsers(siteManagers);
-    if (!formData.recipientId && siteManagers.length > 0) {
-      setFormData(prev => ({ ...prev, recipientId: siteManagers[0].id }));
+  const fetchData = async () => {
+    try {
+      const [notifRes, usersRes] = await Promise.all([
+        api.get('/admin/notifications'),
+        api.get('/admin/users')
+      ]);
+
+      if (notifRes.data.success) {
+        setNotifications(notifRes.data.data);
+      }
+
+      if (usersRes.data.success) {
+        setUsers(usersRes.data.data);
+        if (!formData.recipientId && usersRes.data.data.length > 0) {
+          setFormData(prev => ({ ...prev, recipientId: usersRes.data.data[0]._id }));
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const newNotif = {
-      id: generateId(),
-      ...formData,
-      recipientRole: 'sitemanager',
-      createdAt: new Date().toISOString()
-    };
-    const updated = [...getCollection('notifications', []), newNotif];
-    saveCollection('notifications', updated);
-    showToast('Notification sent successfully', 'success');
-    setShowForm(false);
-    setFormData({ recipientId: users[0]?.id || '', message: '', type: 'general' });
-    setNotifications(updated);
+    try {
+      const response = await api.post('/admin/notifications', formData);
+      if (response.data.success) {
+        showToast('Notification sent successfully', 'success');
+        setShowForm(false);
+        setFormData({ recipientId: users[0]?._id || '', message: '', type: 'general' });
+        fetchData();
+      }
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to send notification', 'error');
+      console.error('Error sending notification:', error);
+    }
   };
 
   return (

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { showToast } from '../../components/Toast';
-import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
+import api from '../../services/api';
 
 const Expenses = () => {
   const [expenses, setExpenses] = useState([]);
@@ -17,53 +17,107 @@ const Expenses = () => {
   });
 
   useEffect(() => {
-    ensureSeedData();
     fetchProjects();
     fetchExpenses();
   }, []);
 
   const fetchExpenses = async () => {
-    const stored = getCollection('expenses', []);
-    setExpenses(stored);
+    try {
+      const response = await api.get('/admin/expenses');
+      if (response.data.success) {
+        const expenses = response.data.data;
+
+        const contractorResponse = await api.get('/admin/contractors');
+        if (contractorResponse.data.success) {
+          const contractors = contractorResponse.data.data;
+          const contractorPaymentPromises = contractors.map(c =>
+            api.get(`/admin/contractors/${c._id}/payments`)
+          );
+
+          const paymentResponses = await Promise.all(contractorPaymentPromises);
+          const allPayments = paymentResponses.flatMap(res =>
+            res.data.success ? res.data.data : []
+          );
+
+          const contractorExpenses = allPayments.map(payment => ({
+            _id: payment._id,
+            projectId: 'contractor',
+            name: `Contractor Payment - ${payment.contractorName}`,
+            amount: payment.amount,
+            voucherNumber: `CP-${payment._id.slice(0, 8)}`,
+            category: 'contractor',
+            remarks: payment.remark || 'Contractor payment',
+            createdAt: payment.createdAt,
+            isContractorPayment: true
+          }));
+
+          setExpenses([...expenses, ...contractorExpenses]);
+        } else {
+          setExpenses(expenses);
+        }
+      }
+    } catch (error) {
+      showToast('Failed to fetch expenses', 'error');
+      console.error('Error fetching expenses:', error);
+    }
   };
 
   const fetchProjects = async () => {
-    const stored = getCollection('projects', []);
-    setProjects(stored);
-    if (stored.length > 0) {
-      setFormData(prev => ({ ...prev, projectId: stored[0].id }));
+    try {
+      const response = await api.get('/admin/projects');
+      if (response.data.success) {
+        setProjects(response.data.data);
+        if (response.data.data.length > 0) {
+          setFormData(prev => ({ ...prev, projectId: response.data.data[0]._id }));
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching projects:', error);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const newExpense = {
-      ...formData,
-      id: generateId(),
-      amount: Number(formData.amount) || 0,
-      createdAt: new Date().toISOString()
-    };
-    const updated = [...getCollection('expenses', []), newExpense];
-    saveCollection('expenses', updated);
-    showToast('Expense added successfully', 'success');
-    setShowForm(false);
-    setFormData({
-      projectId: projects[0]?.id || '',
-      name: '',
-      amount: '',
-      voucherNumber: '',
-      category: 'material',
-      remarks: ''
-    });
-    setExpenses(updated);
+    try {
+      const response = await api.post('/admin/expenses', {
+        ...formData,
+        amount: Number(formData.amount) || 0
+      });
+      if (response.data.success) {
+        showToast('Expense added successfully', 'success');
+        setShowForm(false);
+        setFormData({
+          projectId: projects[0]?._id || '',
+          name: '',
+          amount: '',
+          voucherNumber: '',
+          category: 'material',
+          remarks: ''
+        });
+        fetchExpenses();
+      }
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to add expense', 'error');
+      console.error('Error adding expense:', error);
+    }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id, isContractorPayment) => {
     if (!confirm('Delete this expense?')) return;
-    const updated = getCollection('expenses', []).filter(e => e.id !== id);
-    saveCollection('expenses', updated);
-    showToast('Expense deleted', 'success');
-    setExpenses(updated);
+    if (isContractorPayment) {
+      showToast('Cannot delete contractor payments from here', 'error');
+      return;
+    }
+    try {
+      const response = await api.delete(`/admin/expenses/${id}`);
+      if (response.data.success) {
+        showToast('Expense deleted', 'success');
+        fetchExpenses();
+      }
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to delete expense', 'error');
+      console.error('Error deleting expense:', error);
+    }
   };
 
   const filteredExpenses = selectedProject === 'all'
@@ -89,7 +143,7 @@ const Expenses = () => {
         >
           <option value="all">All Projects</option>
           {projects.map(p => (
-            <option key={p.id} value={p.id}>{p.name}</option>
+            <option key={p._id} value={p._id}>{p.name}</option>
           ))}
         </select>
       </div>
@@ -105,7 +159,7 @@ const Expenses = () => {
                 required
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {projects.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
               </select>
             </div>
             <div>
@@ -141,6 +195,7 @@ const Expenses = () => {
                 <option value="labour">Labour</option>
                 <option value="machinery">Machinery</option>
                 <option value="transport">Transport</option>
+                <option value="contractor">Contractor</option>
                 <option value="other">Other</option>
               </select>
             </div>
@@ -180,7 +235,7 @@ const Expenses = () => {
         {/* Mobile View */}
         <div className="block md:hidden space-y-3">
           {filteredExpenses.map(e => (
-            <div key={e.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div key={e._id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
               <div className="font-bold text-gray-900 mb-2">{e.name}</div>
               <div className="text-sm space-y-1">
                 <div><span className="font-medium">Project:</span> {e.projectId}</div>
@@ -215,7 +270,7 @@ const Expenses = () => {
             </thead>
             <tbody>
               {filteredExpenses.map(e => (
-                <tr key={e.id} className="border-b border-gray-200 hover:bg-gray-50">
+                <tr key={e._id} className="border-b border-gray-200 hover:bg-gray-50">
                   <td className="px-4 py-3">{e.projectId}</td>
                   <td className="px-4 py-3">{e.name}</td>
                   <td className="px-4 py-3 capitalize">{e.category || 'N/A'}</td>
@@ -223,12 +278,14 @@ const Expenses = () => {
                   <td className="px-4 py-3">{e.voucherNumber || 'N/A'}</td>
                   <td className="px-4 py-3">{new Date(e.createdAt).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => alert('Edit coming soon')}
-                      className="px-3 py-1.5 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
-                    >
-                      Edit
-                    </button>
+                    {!e.isContractorPayment && (
+                      <button
+                        onClick={() => handleDelete(e._id, e.isContractorPayment)}
+                        className="px-3 py-1.5 bg-red-500 text-white rounded text-sm hover:bg-red-600"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

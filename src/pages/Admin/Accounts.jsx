@@ -1,32 +1,22 @@
 import { useState, useEffect } from 'react';
-import { ensureSeedData, getCollection } from '../../services/storage';
+import api from '../../services/api';
 
 const Accounts = () => {
   const [data, setData] = useState(null);
 
   useEffect(() => {
-    ensureSeedData();
     fetchAccounts();
   }, []);
 
-  const fetchAccounts = () => {
-    const expenses = getCollection('expenses', []);
-    const accounts = getCollection('accounts', { capital: 0 });
-    const bankTransactions = getCollection('bankTransactions', []);
-    const cashTransactions = getCollection('cashTransactions', []);
-
-    const totalExpenses = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-    const totalBankTransactions = bankTransactions.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-    const totalCashTransactions = cashTransactions.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-
-    setData({
-      capital: accounts.capital || 0,
-      totalExpenses,
-      totalBankTransactions,
-      totalCashTransactions,
-      bankTransactions,
-      cashTransactions
-    });
+  const fetchAccounts = async () => {
+    try {
+      const response = await api.get('/admin/accounts');
+      if (response.data.success) {
+        setData(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching accounts:', error);
+    }
   };
 
   return (

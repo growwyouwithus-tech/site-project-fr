@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
+import api from '../../services/api';
 import { showToast } from '../../components/Toast';
 
 const StockIn = () => {
@@ -10,40 +10,57 @@ const StockIn = () => {
   const [formData, setFormData] = useState({ projectId: '', vendorId: '', materialName: '', unit: 'kg', quantity: '', unitPrice: '', photo: '', remarks: '' });
 
   useEffect(() => {
-    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = () => {
-    const vend = getCollection('vendors', []);
-    const proj = getCollection('projects', []);
-    const stock = getCollection('stocks', []);
-    setVendors(vend);
-    setProjects(proj);
-    setStocks(stock);
-    if (proj.length > 0) setFormData(prev => ({ ...prev, projectId: proj[0].id }));
-    if (vend.length > 0) setFormData(prev => ({ ...prev, vendorId: vend[0].id }));
+  const fetchData = async () => {
+    try {
+      const [vendorsRes, projectsRes, stocksRes] = await Promise.all([
+        api.get('/site/vendors'),
+        api.get('/site/projects'),
+        api.get('/site/stocks')
+      ]);
+
+      if (vendorsRes.data.success) {
+        setVendors(vendorsRes.data.data);
+        if (vendorsRes.data.data.length > 0) {
+          setFormData(prev => ({ ...prev, vendorId: vendorsRes.data.data[0]._id }));
+        }
+      }
+
+      if (projectsRes.data.success) {
+        setProjects(projectsRes.data.data);
+        if (projectsRes.data.data.length > 0) {
+          setFormData(prev => ({ ...prev, projectId: projectsRes.data.data[0]._id }));
+        }
+      }
+
+      if (stocksRes.data.success) {
+        setStocks(stocksRes.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const vendor = vendors.find(v => v.id === formData.vendorId);
-    const qty = Number(formData.quantity) || 0;
-    const price = Number(formData.unitPrice) || 0;
-    const record = {
-      id: generateId(),
-      ...formData,
-      quantity: qty,
-      unitPrice: price,
-      totalPrice: qty * price,
-      vendorName: vendor?.name || '',
-      createdAt: new Date().toISOString()
-    };
-    const updated = [...getCollection('stocks', []), record];
-    saveCollection('stocks', updated);
-    showToast('Stock added successfully', 'success');
-    setFormData({ projectId: projects[0]?.id || '', vendorId: vendors[0]?.id || '', materialName: '', unit: 'kg', quantity: '', unitPrice: '', photo: '', remarks: '' });
-    setStocks(updated);
+    try {
+      const response = await api.post('/site/stock-in', {
+        ...formData,
+        quantity: Number(formData.quantity) || 0,
+        unitPrice: Number(formData.unitPrice) || 0
+      });
+
+      if (response.data.success) {
+        showToast('Stock added successfully', 'success');
+        setFormData({ projectId: projects[0]?._id || '', vendorId: vendors[0]?._id || '', materialName: '', unit: 'kg', quantity: '', unitPrice: '', photo: '', remarks: '' });
+        fetchData();
+      }
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to add stock', 'error');
+      console.error('Error adding stock:', error);
+    }
   };
 
   const handlePhoto = (file) => {

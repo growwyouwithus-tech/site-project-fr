@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
+import api from '../../services/api';
 import { showToast } from '../../components/Toast';
 import Camera from '../../components/Camera';
 
@@ -10,17 +10,28 @@ const SMAttendance = () => {
   const [formData, setFormData] = useState({ date: new Date().toISOString().split('T')[0], projectId: '', photo: '', remarks: '' });
 
   useEffect(() => {
-    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = () => {
-    const att = getCollection('attendanceSite', []);
-    const proj = getCollection('projects', []);
-    setAttendance(att);
-    setProjects(proj);
-    if (proj.length > 0) {
-      setFormData(prev => ({ ...prev, projectId: proj[0].id }));
+  const fetchData = async () => {
+    try {
+      const [attendanceRes, projectsRes] = await Promise.all([
+        api.get('/site/attendance'),
+        api.get('/site/projects')
+      ]);
+
+      if (attendanceRes.data.success) {
+        setAttendance(attendanceRes.data.data);
+      }
+
+      if (projectsRes.data.success) {
+        setProjects(projectsRes.data.data);
+        if (projectsRes.data.data.length > 0) {
+          setFormData(prev => ({ ...prev, projectId: projectsRes.data.data[0]._id }));
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
     }
   };
 
@@ -29,22 +40,23 @@ const SMAttendance = () => {
     setShowCamera(false);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.photo) {
       showToast('Please capture a photo', 'error');
       return;
     }
-    const record = {
-      id: generateId(),
-      ...formData,
-      time: new Date().toISOString()
-    };
-    const updated = [...getCollection('attendanceSite', []), record];
-    saveCollection('attendanceSite', updated);
-    showToast('Attendance marked successfully', 'success');
-    setFormData({ date: new Date().toISOString().split('T')[0], projectId: projects[0]?.id || '', photo: '', remarks: '' });
-    setAttendance(updated);
+    try {
+      const response = await api.post('/site/attendance', formData);
+      if (response.data.success) {
+        showToast('Attendance marked successfully', 'success');
+        setFormData({ date: new Date().toISOString().split('T')[0], projectId: projects[0]?._id || '', photo: '', remarks: '' });
+        fetchData();
+      }
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to mark attendance', 'error');
+      console.error('Error marking attendance:', error);
+    }
   };
 
   return (

@@ -1,30 +1,13 @@
 /**
  * Authentication Context
  * Manages user authentication state across the application
- * Frontend-only version: stores auth data in sessionStorage (no backend required)
+ * Uses backend API for authentication with session-based auth
  */
 
 import { createContext, useContext, useState, useEffect } from 'react';
+import api from '../services/api';
 
 const AuthContext = createContext();
-
-// Hardcoded demo users (matches previous backend demo credentials)
-const MOCK_USERS = [
-  {
-    id: '1',
-    name: 'Admin User',
-    email: 'admin@construction.com',
-    role: 'admin',
-    password: 'password123'
-  },
-  {
-    id: '2',
-    name: 'Rajesh Kumar',
-    email: 'rajesh@construction.com',
-    role: 'sitemanager',
-    password: 'manager123'
-  }
-];
 
 // Custom hook to use auth context
 export const useAuth = () => {
@@ -40,45 +23,54 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Check if user is logged in on mount (sessionStorage acts as session)
+  // Check if user is logged in on mount (check session with backend)
   useEffect(() => {
-    const storedUser = sessionStorage.getItem('auth_user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (error) {
-        console.error('Failed to parse stored user', error);
-        sessionStorage.removeItem('auth_user');
-      }
-    }
-    setLoading(false);
+    checkAuth();
   }, []);
 
-  // Login function (frontend-only, validates against mock users)
-  const login = async (email, password) => {
-    const foundUser = MOCK_USERS.find(
-      (u) => u.email === email.trim().toLowerCase() && u.password === password
-    );
-
-    if (!foundUser) {
-      return {
-        success: false,
-        error: 'Invalid email or password'
-      };
+  const checkAuth = async () => {
+    try {
+      const response = await api.get('/auth/me');
+      if (response.data.success) {
+        setUser(response.data.data);
+      }
+    } catch (error) {
+      setUser(null);
+    } finally {
+      setLoading(false);
     }
-
-    const { password: _, ...userData } = foundUser;
-    sessionStorage.setItem('auth_user', JSON.stringify(userData));
-    setUser(userData);
-
-    return { success: true };
   };
 
-  // Logout function (clears sessionStorage)
+  // Login function (calls backend API)
+  const login = async (email, password) => {
+    try {
+      const response = await api.post('/auth/login', { email, password });
+      if (response.data.success) {
+        setUser(response.data.data.user);
+        return { success: true };
+      }
+      return {
+        success: false,
+        error: response.data.error || 'Login failed'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Invalid email or password'
+      };
+    }
+  };
+
+  // Logout function (calls backend API)
   const logout = async () => {
-    sessionStorage.removeItem('auth_user');
-    setUser(null);
-    window.location.href = '/';
+    try {
+      await api.post('/auth/logout');
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setUser(null);
+      window.location.href = '/';
+    }
   };
 
   const value = {

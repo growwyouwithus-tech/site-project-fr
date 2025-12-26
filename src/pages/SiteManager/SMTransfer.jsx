@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
+import api from '../../services/api';
 import { showToast } from '../../components/Toast';
 
 const SMTransfer = () => {
@@ -10,36 +10,53 @@ const SMTransfer = () => {
   const [formData, setFormData] = useState({ type: 'labour', itemId: '', fromProject: '', toProject: '', quantity: 1, remarks: '' });
 
   useEffect(() => {
-    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = () => {
-    const trans = getCollection('transfers', []);
-    const proj = getCollection('projects', []);
-    const labs = getCollection('labours', []);
-    setTransfers(trans);
-    setProjects(proj);
-    setLabours(labs);
+  const fetchData = async () => {
+    try {
+      const [transfersRes, projectsRes, laboursRes] = await Promise.all([
+        api.get('/site/transfers'),
+        api.get('/site/projects'),
+        api.get('/site/labours')
+      ]);
+
+      if (transfersRes.data.success) {
+        setTransfers(transfersRes.data.data);
+      }
+
+      if (projectsRes.data.success) {
+        setProjects(projectsRes.data.data);
+      }
+
+      if (laboursRes.data.success) {
+        setLabours(laboursRes.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    }
   };
 
-  const projectName = (id) => projects.find(p => p.id === id)?.name || id || '-';
+  const projectName = (id) => projects.find(p => p._id === id)?.name || id || '-';
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const record = {
-      id: generateId(),
-      ...formData,
-      quantity: Number(formData.quantity) || 1,
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    };
-    const updated = [...getCollection('transfers', []), record];
-    saveCollection('transfers', updated);
-    showToast('Transfer request submitted', 'success');
-    setShowForm(false);
-    setFormData({ type: 'labour', itemId: '', fromProject: '', toProject: '', quantity: 1, remarks: '' });
-    setTransfers(updated);
+    try {
+      const response = await api.post('/site/transfer', {
+        ...formData,
+        quantity: Number(formData.quantity) || 1
+      });
+
+      if (response.data.success) {
+        showToast('Transfer request submitted', 'success');
+        setShowForm(false);
+        setFormData({ type: 'labour', itemId: '', fromProject: '', toProject: '', quantity: 1, remarks: '' });
+        fetchData();
+      }
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to submit transfer request', 'error');
+      console.error('Error submitting transfer:', error);
+    }
   };
 
   return (

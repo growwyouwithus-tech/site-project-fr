@@ -5,9 +5,12 @@
 
 import axios from 'axios';
 
+// Get API base URL from environment variable or use proxy for development
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+
 // Create axios instance
 const api = axios.create({
-  baseURL: '/api', // Proxy configured in vite.config.js
+  baseURL: API_BASE_URL,
   withCredentials: true, // Send cookies with requests (for session)
   headers: {
     'Content-Type': 'application/json'
@@ -35,7 +38,7 @@ api.interceptors.response.use(
     if (error.response) {
       // Server responded with error
       console.error('API Error:', error.response.data);
-      
+
       // Redirect to login if unauthorized (but not if already on login page)
       if (error.response.status === 401 && window.location.pathname !== '/') {
         // Only redirect if not already redirecting
@@ -50,7 +53,7 @@ api.interceptors.response.use(
       // Something else happened
       console.error('Error:', error.message);
     }
-    
+
     return Promise.reject(error);
   }
 );

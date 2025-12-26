@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ensureSeedData, getCollection } from '../../services/storage';
+import api from '../../services/api';
 import { showToast } from '../../components/Toast';
 
 const Profile = () => {
@@ -7,20 +7,20 @@ const Profile = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    ensureSeedData();
     fetchProfile();
   }, []);
 
-  const fetchProfile = () => {
+  const fetchProfile = async () => {
     try {
-      const user = getCollection('users', []).find(u => u.role === 'sitemanager');
-      if (user) {
-        setProfile(user);
+      const response = await api.get('/site/profile');
+      if (response.data.success) {
+        setProfile(response.data.data);
       } else {
         setProfile(null);
       }
     } catch (error) {
       showToast('Failed to load profile', 'error');
+      console.error('Error fetching profile:', error);
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
+import api from '../../services/api';
 import { showToast } from '../../components/Toast';
 
 const Labour = () => {
@@ -9,33 +9,46 @@ const Labour = () => {
   const [formData, setFormData] = useState({ name: '', phone: '', dailyWage: '', designation: '', assignedSite: '' });
 
   useEffect(() => {
-    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = () => {
-    const storedLabours = getCollection('labours', []);
-    const storedProjects = getCollection('projects', []);
-    setLabours(storedLabours);
-    setProjects(storedProjects);
-    if (storedProjects.length > 0) {
-      setFormData(prev => ({ ...prev, assignedSite: storedProjects[0].id }));
+  const fetchData = async () => {
+    try {
+      const [laboursRes, projectsRes] = await Promise.all([
+        api.get('/site/labours'),
+        api.get('/site/projects')
+      ]);
+
+      if (laboursRes.data.success) {
+        setLabours(laboursRes.data.data);
+      }
+
+      if (projectsRes.data.success) {
+        setProjects(projectsRes.data.data);
+        if (projectsRes.data.data.length > 0) {
+          setFormData(prev => ({ ...prev, assignedSite: projectsRes.data.data[0]._id }));
+        }
+      }
+    } catch (error) {
+      showToast('Failed to fetch data', 'error');
+      console.error('Error fetching data:', error);
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const labourData = {
-      id: generateId(),
-      ...formData,
-      pendingPayout: 0
-    };
-    const updated = [...getCollection('labours', []), labourData];
-    saveCollection('labours', updated);
-    showToast('Labour enrolled successfully', 'success');
-    setShowForm(false);
-    setFormData({ name: '', phone: '', dailyWage: '', designation: '', assignedSite: projects[0]?.id || '' });
-    setLabours(updated);
+    try {
+      const response = await api.post('/site/labours', formData);
+      if (response.data.success) {
+        showToast('Labour enrolled successfully', 'success');
+        setShowForm(false);
+        setFormData({ name: '', phone: '', dailyWage: '', designation: '', assignedSite: projects[0]?._id || '' });
+        fetchData();
+      }
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to enroll labour', 'error');
+      console.error('Error enrolling labour:', error);
+    }
   };
 
   return (
@@ -103,7 +116,7 @@ const Labour = () => {
                 required
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {projects.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
               </select>
             </div>
           </div>
@@ -119,14 +132,13 @@ const Labour = () => {
         {/* Mobile View */}
         <div className="block md:hidden space-y-3">
           {labours.map(l => (
-            <div key={l.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div key={l._id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
               <div className="font-bold text-gray-900 mb-2">{l.name}</div>
               <div className="text-sm space-y-1">
-                <div><span className="font-medium">ID:</span> {l.id}</div>
                 <div><span className="font-medium">Phone:</span> {l.phone}</div>
                 <div><span className="font-medium">Daily Wage:</span> <span className="text-green-600 font-bold">₹{l.dailyWage}</span></div>
                 <div><span className="font-medium">Designation:</span> {l.designation}</div>
-                <div><span className="font-medium">Site:</span> {l.assignedSite}</div>
+                <div><span className="font-medium">Site:</span> {l.assignedSite?.name || 'Not assigned'}</div>
                 <div><span className="font-medium">Pending:</span> <span className="text-red-600 font-bold">₹{l.pendingPayout || 0}</span></div>
               </div>
             </div>
@@ -138,7 +150,6 @@ const Labour = () => {
           <table className="w-full">
             <thead>
               <tr className="border-b-2 border-gray-200">
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">ID</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Name</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Phone</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Daily Wage</th>
@@ -149,13 +160,12 @@ const Labour = () => {
             </thead>
             <tbody>
               {labours.map(l => (
-                <tr key={l.id} className="border-b border-gray-200 hover:bg-gray-50">
-                  <td className="px-4 py-3">{l.id}</td>
+                <tr key={l._id} className="border-b border-gray-200 hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium">{l.name}</td>
                   <td className="px-4 py-3">{l.phone}</td>
                   <td className="px-4 py-3 text-green-600 font-bold">₹{l.dailyWage}</td>
                   <td className="px-4 py-3">{l.designation}</td>
-                  <td className="px-4 py-3">{l.assignedSite}</td>
+                  <td className="px-4 py-3">{l.assignedSite?.name || 'Not assigned'}</td>
                   <td className="px-4 py-3 text-red-600 font-bold">₹{l.pendingPayout || 0}</td>
                 </tr>
               ))}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
+import api from '../../services/api';
 import { showToast } from '../../components/Toast';
 
 const Transfer = () => {
@@ -10,43 +10,57 @@ const Transfer = () => {
   const [formData, setFormData] = useState({ type: 'labour', itemId: '', fromProject: '', toProject: '', quantity: 1 });
 
   useEffect(() => {
-    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = () => {
-    const storedTransfers = getCollection('transfers', []);
-    const storedProjects = getCollection('projects', []);
-    const storedLabours = getCollection('labours', []);
-    setTransfers(storedTransfers);
-    setProjects(storedProjects);
-    setLabours(storedLabours);
-    if (storedProjects.length > 0) {
-      setFormData(prev => ({
-        ...prev,
-        fromProject: prev.fromProject || storedProjects[0].id,
-        toProject: prev.toProject || storedProjects[0].id
-      }));
-    }
-    if (storedLabours.length > 0 && formData.type === 'labour') {
-      setFormData(prev => ({ ...prev, itemId: prev.itemId || storedLabours[0].id }));
+  const fetchData = async () => {
+    try {
+      const [transfersRes, projectsRes, laboursRes] = await Promise.all([
+        api.get('/admin/transfers'),
+        api.get('/admin/projects'),
+        api.get('/site/labours')
+      ]);
+
+      if (transfersRes.data.success) {
+        setTransfers(transfersRes.data.data);
+      }
+
+      if (projectsRes.data.success) {
+        setProjects(projectsRes.data.data);
+        if (projectsRes.data.data.length > 0) {
+          setFormData(prev => ({
+            ...prev,
+            fromProject: prev.fromProject || projectsRes.data.data[0]._id,
+            toProject: prev.toProject || projectsRes.data.data[0]._id
+          }));
+        }
+      }
+
+      if (laboursRes.data.success) {
+        setLabours(laboursRes.data.data);
+        if (laboursRes.data.data.length > 0 && formData.type === 'labour') {
+          setFormData(prev => ({ ...prev, itemId: prev.itemId || laboursRes.data.data[0]._id }));
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const newTransfer = {
-      id: generateId(),
-      ...formData,
-      status: 'completed',
-      createdAt: new Date().toISOString()
-    };
-    const updated = [...getCollection('transfers', []), newTransfer];
-    saveCollection('transfers', updated);
-    showToast('Transfer completed', 'success');
-    setShowForm(false);
-    setFormData({ type: 'labour', itemId: '', fromProject: projects[0]?.id || '', toProject: projects[0]?.id || '', quantity: 1 });
-    setTransfers(updated);
+    try {
+      const response = await api.post('/admin/transfers', formData);
+      if (response.data.success) {
+        showToast('Transfer completed', 'success');
+        setShowForm(false);
+        setFormData({ type: 'labour', itemId: '', fromProject: projects[0]?._id || '', toProject: projects[0]?._id || '', quantity: 1 });
+        fetchData();
+      }
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to create transfer', 'error');
+      console.error('Error creating transfer:', error);
+    }
   };
 
   return (

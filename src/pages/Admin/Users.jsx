@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
+import api from '../../services/api';
 import { showToast } from '../../components/Toast';
 
 const Users = () => {
@@ -10,48 +10,48 @@ const Users = () => {
   const [viewingUser, setViewingUser] = useState(null);
   const [formData, setFormData] = useState({ name: '', email: '', password: '', phone: '', salary: '', dateOfJoining: new Date().toISOString().split('T')[0] });
 
-  const generateUserId = () => {
-    const prefix = 'USR';
-    const timestamp = Date.now().toString().slice(-6);
-    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-    return `${prefix}${timestamp}${random}`;
-  };
-
   useEffect(() => {
-    ensureSeedData();
     fetchUsers();
   }, []);
 
-  const fetchUsers = () => {
-    const stored = getCollection('users', []);
-    setUsers(stored);
+  const fetchUsers = async () => {
+    try {
+      const response = await api.get('/admin/users');
+      if (response.data.success) {
+        setUsers(response.data.data);
+      }
+    } catch (error) {
+      showToast('Failed to fetch users', 'error');
+      console.error('Error fetching users:', error);
+    }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (editingUser) {
-      const updated = getCollection('users', []).map(u => 
-        u.id === editingUser.id ? { ...u, ...formData } : u
-      );
-      saveCollection('users', updated);
-      showToast('User updated successfully', 'success');
-      setEditingUser(null);
-    } else {
-      const userData = {
-        id: generateId(),
-        ...formData,
-        role: 'sitemanager',
-        userId: generateUserId(),
-        active: true
-      };
-      const updated = [...getCollection('users', []), userData];
-      saveCollection('users', updated);
-      showToast('Site manager created successfully', 'success');
+    try {
+      if (editingUser) {
+        const response = await api.put(`/admin/users/${editingUser.id}`, formData);
+        if (response.data.success) {
+          showToast('User updated successfully', 'success');
+          setEditingUser(null);
+        }
+      } else {
+        const response = await api.post('/admin/users', {
+          ...formData,
+          role: 'sitemanager'
+        });
+        if (response.data.success) {
+          showToast('Site manager created successfully', 'success');
+        }
+      }
+      setShowForm(false);
+      setShowPassword(false);
+      setFormData({ name: '', email: '', password: '', phone: '', salary: '', dateOfJoining: new Date().toISOString().split('T')[0] });
+      fetchUsers();
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to save user', 'error');
+      console.error('Error saving user:', error);
     }
-    setShowForm(false);
-    setShowPassword(false);
-    setFormData({ name: '', email: '', password: '', phone: '', salary: '', dateOfJoining: new Date().toISOString().split('T')[0] });
-    fetchUsers();
   };
 
   const handleEdit = (user) => {
@@ -68,22 +68,18 @@ const Users = () => {
     setShowPassword(false);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (!confirm('Are you sure you want to delete this user?')) return;
-    const updated = getCollection('users', []).filter(u => u.id !== id);
-    saveCollection('users', updated);
-    showToast('User deleted successfully', 'success');
-    setUsers(updated);
-  };
-
-  const handleDeactivate = (id) => {
-    if (!confirm('Deactivate this user?')) return;
-    const updated = getCollection('users', []).map(u => 
-      u.id === id ? { ...u, active: false } : u
-    );
-    saveCollection('users', updated);
-    showToast('User deactivated', 'success');
-    setUsers(updated);
+    try {
+      const response = await api.delete(`/admin/users/${id}`);
+      if (response.data.success) {
+        showToast('User deleted successfully', 'success');
+        fetchUsers();
+      }
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to delete user', 'error');
+      console.error('Error deleting user:', error);
+    }
   };
 
   const handleCancelForm = () => {
@@ -329,7 +325,7 @@ const Users = () => {
                 <span className="font-semibold">Date of Joining:</span> {viewingUser.dateOfJoining ? new Date(viewingUser.dateOfJoining).toLocaleDateString() : 'N/A'}
               </div>
               <div>
-                <span className="font-semibold">Status:</span> 
+                <span className="font-semibold">Status:</span>
                 <span className={`ml-2 px-3 py-1 rounded-full text-xs font-semibold ${viewingUser.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                   {viewingUser.active ? 'Active' : 'Inactive'}
                 </span>

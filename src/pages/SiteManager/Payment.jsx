@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ensureSeedData, getCollection, saveCollection, generateId } from '../../services/storage';
+import api from '../../services/api';
 import { showToast } from '../../components/Toast';
 
 const Payment = () => {
@@ -9,55 +9,47 @@ const Payment = () => {
   const [formData, setFormData] = useState({ labourId: '', amount: '', deduction: 0, paymentMode: 'cash', remarks: '' });
 
   useEffect(() => {
-    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = () => {
-    const labs = getCollection('labours', []);
-    const pays = getCollection('payments', []);
-    setLabours(labs);
-    setPayments(pays);
+  const fetchData = async () => {
+    try {
+      const [laboursRes, paymentsRes] = await Promise.all([
+        api.get('/site/labours'),
+        api.get('/site/payments')
+      ]);
+
+      if (laboursRes.data.success) {
+        setLabours(laboursRes.data.data);
+      }
+
+      if (paymentsRes.data.success) {
+        setPayments(paymentsRes.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const labour = labours.find(l => l.id === formData.labourId);
-    const amount = Number(formData.amount) || 0;
-    const deduction = Number(formData.deduction) || 0;
-    const finalAmount = Math.max(0, amount - deduction);
-
-    const payment = {
-      id: generateId(),
-      ...formData,
-      labourName: labour?.name || '',
-      amount,
-      deduction,
-      finalAmount,
-      createdAt: new Date().toISOString()
-    };
-
-    // update payments collection
-    const updatedPayments = [...getCollection('payments', []), payment];
-    saveCollection('payments', updatedPayments);
-
-    // update labour pending payout
-    if (labour) {
-      const labs = getCollection('labours', []).map(l => {
-        if (l.id === labour.id) {
-          const nextPending = Math.max(0, (Number(l.pendingPayout) || 0) - finalAmount);
-          return { ...l, pendingPayout: nextPending };
-        }
-        return l;
+    try {
+      const response = await api.post('/site/payment', {
+        ...formData,
+        amount: Number(formData.amount) || 0,
+        deduction: Number(formData.deduction) || 0
       });
-      saveCollection('labours', labs);
-      setLabours(labs);
-    }
 
-    showToast('Payment recorded successfully', 'success');
-    setShowForm(false);
-    setFormData({ labourId: '', amount: '', deduction: 0, paymentMode: 'cash', remarks: '' });
-    setPayments(updatedPayments);
+      if (response.data.success) {
+        showToast('Payment recorded successfully', 'success');
+        setShowForm(false);
+        setFormData({ labourId: '', amount: '', deduction: 0, paymentMode: 'cash', remarks: '' });
+        fetchData();
+      }
+    } catch (error) {
+      showToast(error.response?.data?.error || 'Failed to record payment', 'error');
+      console.error('Error recording payment:', error);
+    }
   };
 
   return (

@@ -1,25 +1,36 @@
 import { useState, useEffect } from 'react';
-import { ensureSeedData, getCollection } from '../../services/storage';
+import api from '../../services/api';
 
 const Attendance = () => {
   const [attendance, setAttendance] = useState([]);
   const [users, setUsers] = useState([]);
 
   useEffect(() => {
-    ensureSeedData();
     fetchData();
   }, []);
 
-  const fetchData = () => {
-    const storedAttendance = getCollection('attendanceAdmin', []);
-    const storedUsers = getCollection('users', []).filter(u => u.role === 'sitemanager');
-    setAttendance(storedAttendance);
-    setUsers(storedUsers);
+  const fetchData = async () => {
+    try {
+      const [attendanceRes, usersRes] = await Promise.all([
+        api.get('/admin/attendance'),
+        api.get('/admin/users')
+      ]);
+
+      if (attendanceRes.data.success) {
+        setAttendance(attendanceRes.data.data);
+      }
+
+      if (usersRes.data.success) {
+        setUsers(usersRes.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    }
   };
 
   // Calculate attendance percentage
   const calculateAttendancePercentage = (userId) => {
-    const userAttendance = attendance.filter(att => att.userId === userId);
+    const userAttendance = attendance.filter(att => att.userId === userId || att.userId?._id === userId);
     const today = new Date();
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
